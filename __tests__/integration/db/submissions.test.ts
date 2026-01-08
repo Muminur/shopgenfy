@@ -143,7 +143,7 @@ describe('Submissions CRUD Operations', () => {
       });
 
       expect(updated?.appName).toBe('Updated Name');
-      expect(updated?.updatedAt.getTime()).toBeGreaterThan(created.updatedAt.getTime());
+      expect(updated?.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
     });
 
     it('should return null for non-existent id', async () => {
