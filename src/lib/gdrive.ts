@@ -152,10 +152,12 @@ export function createGoogleDriveClient(credentials: DriveCredentials): GoogleDr
       if (options.buffer.byteLength === 0) {
         throw new GoogleDriveError('Buffer must not be empty');
       }
-      fileData = options.buffer.buffer.slice(
-        options.buffer.byteOffset,
-        options.buffer.byteOffset + options.buffer.byteLength
-      );
+      // Create a new ArrayBuffer with just the buffer's content (handles offset/length properly)
+      const uint8View = new Uint8Array(options.buffer);
+      fileData = uint8View.buffer.slice(
+        uint8View.byteOffset,
+        uint8View.byteOffset + uint8View.byteLength
+      ) as ArrayBuffer;
     } else {
       throw new GoogleDriveError('Either sourceUrl or buffer is required');
     }

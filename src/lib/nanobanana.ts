@@ -1,4 +1,5 @@
 import { IMAGE_SPECS, FORBIDDEN_PATTERNS } from './validators/constants';
+import type { ImageType, ImageFormat } from './validators/image';
 
 const NANOBANANA_API_BASE = 'https://api.nanobanana.io/v1';
 const MAX_RETRIES = 3;
@@ -6,9 +7,8 @@ const DEFAULT_POLL_INTERVAL = 1000;
 const DEFAULT_TIMEOUT = 120000;
 const INITIAL_RETRY_DELAY = 1000;
 
-export type ImageType = 'icon' | 'feature';
+export type { ImageType, ImageFormat };
 export type ImageStyle = 'flat' | 'modern' | 'gradient' | 'minimalist' | '3d';
-export type ImageFormat = 'png' | 'jpeg';
 
 export interface ImageGenerationRequest {
   type: ImageType;
