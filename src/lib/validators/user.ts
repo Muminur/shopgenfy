@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
-export const themeSchema = z.enum(['light', 'dark']);
+export const themeSchema = z.enum(['light', 'dark', 'system']);
 
 export const userSchema = z.object({
   id: z.string(),
   email: z.string().email('Invalid email format'),
   selectedGeminiModel: z.string().default('gemini-pro'),
   theme: themeSchema.default('light'),
+  autoSave: z.boolean().default(true),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -15,11 +16,13 @@ export const createUserSchema = z.object({
   email: z.string().email('Invalid email format'),
   selectedGeminiModel: z.string().default('gemini-pro'),
   theme: themeSchema.default('light'),
+  autoSave: z.boolean().default(true),
 });
 
 export const updateUserSchema = z.object({
   selectedGeminiModel: z.string().optional(),
   theme: themeSchema.optional(),
+  autoSave: z.boolean().optional(),
 });
 
 export function validateEmail(email: string): boolean {

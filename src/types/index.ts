@@ -47,7 +47,8 @@ export interface User {
   id: string;
   email: string;
   selectedGeminiModel: string;
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'system';
+  autoSave: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

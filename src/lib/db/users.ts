@@ -6,7 +6,8 @@ export interface UserDocument {
   _id: ObjectId;
   email: string;
   selectedGeminiModel: string;
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'system';
+  autoSave: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -17,6 +18,7 @@ function toUser(doc: WithId<Document>): UserDocument {
     email: doc.email as string,
     selectedGeminiModel: doc.selectedGeminiModel as string,
     theme: doc.theme as UserDocument['theme'],
+    autoSave: (doc.autoSave as boolean) ?? true,
     createdAt: doc.createdAt as Date,
     updatedAt: doc.updatedAt as Date,
   };
@@ -104,5 +106,6 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserDocume
     email,
     selectedGeminiModel: 'gemini-pro',
     theme: 'light',
+    autoSave: true,
   });
 }
