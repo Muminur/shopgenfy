@@ -19,11 +19,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'URL is required' }, { status: 400 });
   }
 
-  // Validate URL format
+  // Validate URL format and protocol
+  let parsedUrl: URL;
   try {
-    new URL(body.url);
+    parsedUrl = new URL(body.url);
   } catch {
     return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
+  }
+
+  // Only allow HTTP/HTTPS protocols
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    return NextResponse.json({ error: 'Only HTTP and HTTPS URLs are allowed' }, { status: 400 });
   }
 
   try {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { getSubmissionById, updateSubmission, deleteSubmission } from '@/lib/db/submissions';
+import { updateSubmissionSchema } from '@/lib/validators/submission';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -48,11 +49,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
   const { id } = await params;
 
-  let body: Record<string, unknown>;
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  // Validate the update data
+  const parseResult = updateSubmissionSchema.safeParse(body);
+  if (!parseResult.success) {
+    const errors = parseResult.error.issues.map((i) => i.message).join(', ');
+    return NextResponse.json({ error: `Validation failed: ${errors}` }, { status: 400 });
   }
 
   try {
@@ -69,7 +77,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const updated = await updateSubmission(db, id, body);
+    const updated = await updateSubmission(db, id, parseResult.data);
 
     if (!updated) {
       return NextResponse.json({ error: 'Failed to update submission' }, { status: 500 });

@@ -18,10 +18,13 @@ export async function GET(request: NextRequest) {
   try {
     const db = await getDatabase();
 
-    // Parse pagination params
+    // Parse and validate pagination params
     const searchParams = request.nextUrl.searchParams;
-    const page = parseInt(searchParams.get('page') || '1', 10);
-    const limit = parseInt(searchParams.get('limit') || '10', 10);
+    const pageStr = searchParams.get('page') || '1';
+    const limitStr = searchParams.get('limit') || '10';
+
+    const page = Math.max(1, parseInt(pageStr, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(limitStr, 10) || 10)); // Cap at 100
 
     const result = await getSubmissionsByUserId(db, userId, { page, limit });
 

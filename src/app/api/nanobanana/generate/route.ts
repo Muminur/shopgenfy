@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createNanoBananaClient, NanoBananaError } from '@/lib/nanobanana';
+import { z } from 'zod';
 
-const VALID_IMAGE_TYPES = ['icon', 'feature'] as const;
+const generateImageSchema = z.object({
+  type: z.enum(['icon', 'feature'], { message: 'Image type must be "icon" or "feature"' }),
+  prompt: z.string().min(1, 'Image prompt is required'),
+  style: z.enum(['flat', 'modern', 'gradient', 'minimalist', '3d']).optional(),
+  featureHighlight: z.string().optional(),
+  negativePrompt: z.string().optional(),
+});
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.NANO_BANANA_API_KEY;
@@ -10,44 +17,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Nano Banana API key not configured' }, { status: 500 });
   }
 
-  let body: {
-    type?: string;
-    prompt?: string;
-    style?: string;
-    featureHighlight?: string;
-    negativePrompt?: string;
-  };
-
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (!body.type) {
-    return NextResponse.json({ error: 'Image type is required' }, { status: 400 });
-  }
-
-  if (!VALID_IMAGE_TYPES.includes(body.type as (typeof VALID_IMAGE_TYPES)[number])) {
-    return NextResponse.json(
-      { error: 'Invalid image type. Must be "icon" or "feature"' },
-      { status: 400 }
-    );
-  }
-
-  if (!body.prompt) {
-    return NextResponse.json({ error: 'Image prompt is required' }, { status: 400 });
+  // Validate using Zod schema
+  const parseResult = generateImageSchema.safeParse(body);
+  if (!parseResult.success) {
+    const errors = parseResult.error.issues.map((i) => i.message).join(', ');
+    return NextResponse.json({ error: errors }, { status: 400 });
   }
 
   try {
     const client = createNanoBananaClient(apiKey);
-    const result = await client.generateImage({
-      type: body.type as 'icon' | 'feature',
-      prompt: body.prompt,
-      style: body.style as 'flat' | 'modern' | 'gradient' | 'minimalist' | '3d' | undefined,
-      featureHighlight: body.featureHighlight,
-      negativePrompt: body.negativePrompt,
-    });
+    const result = await client.generateImage(parseResult.data);
 
     return NextResponse.json(result);
   } catch (error) {
