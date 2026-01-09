@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import { Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -27,22 +28,28 @@ export function FeatureListEditor({
   error,
   className,
 }: FeatureListEditorProps) {
-  const handleAddFeature = () => {
+  const handleAddFeature = useCallback(() => {
     if (features.length < maxItems) {
       onChange([...features, '']);
     }
-  };
+  }, [features, maxItems, onChange]);
 
-  const handleRemoveFeature = (index: number) => {
-    const newFeatures = features.filter((_, i) => i !== index);
-    onChange(newFeatures);
-  };
+  const handleRemoveFeature = useCallback(
+    (index: number) => {
+      const newFeatures = features.filter((_, i) => i !== index);
+      onChange(newFeatures);
+    },
+    [features, onChange]
+  );
 
-  const handleUpdateFeature = (index: number, value: string) => {
-    const newFeatures = [...features];
-    newFeatures[index] = value;
-    onChange(newFeatures);
-  };
+  const handleUpdateFeature = useCallback(
+    (index: number, value: string) => {
+      const newFeatures = [...features];
+      newFeatures[index] = value;
+      onChange(newFeatures);
+    },
+    [features, onChange]
+  );
 
   const isAtLimit = features.length >= maxItems;
 

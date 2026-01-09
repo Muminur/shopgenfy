@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { AlertCircle, CheckCircle2, Info, AlertTriangle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -39,7 +40,13 @@ const variantConfig = {
   },
 };
 
-export function AlertMessage({ variant, message, title, onDismiss, className }: AlertMessageProps) {
+export const AlertMessage = memo(function AlertMessage({
+  variant,
+  message,
+  title,
+  onDismiss,
+  className,
+}: AlertMessageProps) {
   const config = variantConfig[variant];
   const Icon = config.icon;
 
@@ -68,4 +75,4 @@ export function AlertMessage({ variant, message, title, onDismiss, className }: 
       )}
     </div>
   );
-}
+});

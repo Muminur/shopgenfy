@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import Image from 'next/image';
 import { RefreshCw, Download, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -20,14 +21,16 @@ interface ImagePreviewCardProps {
   onRegenerate?: (id: string) => void;
   onDownload?: (id: string) => void;
   isRegenerating?: boolean;
+  priority?: boolean;
   className?: string;
 }
 
-export function ImagePreviewCard({
+export const ImagePreviewCard = memo(function ImagePreviewCard({
   image,
   onRegenerate,
   onDownload,
   isRegenerating = false,
+  priority = false,
   className,
 }: ImagePreviewCardProps) {
   const aspectRatio = image.type === 'icon' ? 'aspect-square' : 'aspect-video';
@@ -46,6 +49,7 @@ export function ImagePreviewCard({
               src={image.url}
               alt={image.alt}
               fill
+              priority={priority}
               className="object-cover"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             />
@@ -99,4 +103,4 @@ export function ImagePreviewCard({
       </CardFooter>
     </Card>
   );
-}
+});

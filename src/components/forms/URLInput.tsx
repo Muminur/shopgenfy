@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useEffect } from 'react';
+import { useId, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,8 +50,13 @@ export function URLInput({
   const isValid = isValidURL(value);
   const showValidationState = showValidation && value.length > 0;
 
+  // Track previous validation state to avoid unnecessary calls
+  const prevIsValidRef = useRef<boolean | null>(null);
+
   useEffect(() => {
-    if (onValidate && value) {
+    // Only call onValidate when validation state changes
+    if (onValidate && value && prevIsValidRef.current !== isValid) {
+      prevIsValidRef.current = isValid;
       onValidate(isValid);
     }
   }, [value, isValid, onValidate]);

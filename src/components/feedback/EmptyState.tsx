@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { FileText, ImageIcon, Settings, FolderOpen, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,7 @@ const iconMap: Record<string, LucideIcon> = {
   folder: FolderOpen,
 };
 
-export function EmptyState({
+export const EmptyState = memo(function EmptyState({
   title,
   description,
   icon = 'file',
@@ -48,4 +49,4 @@ export function EmptyState({
       )}
     </div>
   );
-}
+});

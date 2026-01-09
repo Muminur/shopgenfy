@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { Footer } from './Footer';
@@ -12,8 +12,8 @@ interface MainLayoutProps {
 export function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
-  const closeSidebar = () => setSidebarOpen(false);
+  const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   return (
     <div className="min-h-screen flex flex-col">
