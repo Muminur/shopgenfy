@@ -57,7 +57,8 @@ describe('Gemini API Routes', () => {
       });
 
       const { GET } = await import('@/app/api/gemini/models/route');
-      const response = await GET();
+      const request = new NextRequest('http://localhost:3000/api/gemini/models');
+      const response = await GET(request);
 
       expect(response.status).toBe(200);
       const data = await response.json();
@@ -71,7 +72,8 @@ describe('Gemini API Routes', () => {
       // Re-import to get fresh module
       vi.resetModules();
       const { GET } = await import('@/app/api/gemini/models/route');
-      const response = await GET();
+      const request = new NextRequest('http://localhost:3000/api/gemini/models');
+      const response = await GET(request);
 
       expect(response.status).toBe(500);
       const data = await response.json();
@@ -85,7 +87,8 @@ describe('Gemini API Routes', () => {
       });
 
       const { GET } = await import('@/app/api/gemini/models/route');
-      const response = await GET();
+      const request = new NextRequest('http://localhost:3000/api/gemini/models');
+      const response = await GET(request);
 
       expect(response.status).toBe(500);
       const data = await response.json();

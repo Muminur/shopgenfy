@@ -4,8 +4,6 @@ import {
   NanoBananaError,
   type NanoBananaClient,
   type ImageGenerationRequest,
-  type GeneratedImageResult,
-  type JobStatus,
   type VersionInfo,
 } from '@/lib/nanobanana';
 
@@ -88,7 +86,7 @@ describe('Nano Banana API Client - Integration Tests', () => {
       };
 
       let fetchCallCount = 0;
-      global.fetch = vi.fn().mockImplementation(async (url) => {
+      global.fetch = vi.fn().mockImplementation(async (_url) => {
         fetchCallCount++;
 
         if (fetchCallCount === 1) {
