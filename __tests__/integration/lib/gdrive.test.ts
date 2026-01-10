@@ -3,6 +3,7 @@ import {
   createGoogleDriveClient,
   type GoogleDriveClient,
   type UploadOptions,
+  type DriveFile,
 } from '@/lib/gdrive';
 
 /**
@@ -437,8 +438,8 @@ describe('Google Drive API Client - Integration Tests', () => {
 
       expect(result.id).toBe('existing-folder-789');
 
-      const createCalls = (global.fetch as any).mock.calls.filter((call: any) =>
-        call[1]?.method === 'POST' && !call[0].includes('oauth2')
+      const createCalls = (global.fetch as any).mock.calls.filter(
+        (call: any) => call[1]?.method === 'POST' && !call[0].includes('oauth2')
       );
       expect(createCalls.length).toBe(0);
     });
