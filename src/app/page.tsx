@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
+import { Testimonials } from '@/components/landing/Testimonials';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Sparkles, Download, ArrowRight, Globe, Zap, Shield } from 'lucide-react';
@@ -141,6 +142,9 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+        {/* Testimonials Section */}
+        <Testimonials />
 
         {/* CTA Section */}
         <section className="py-16 md:py-24 bg-primary">
