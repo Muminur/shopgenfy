@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGeminiClient, GeminiError } from '@/lib/gemini';
+<<<<<<< HEAD
 import { withCacheHeaders, CachePresets } from '@/lib/cache';
+=======
+import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
 
-export async function GET(request?: NextRequest) {
+const rateLimiter = createRateLimiter(rateLimitConfigs.gemini.models);
+
+export async function GET(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = await rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+>>>>>>> 2ffb81e (feat(m4): add rate limiting middleware to API routes)
+
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
@@ -13,8 +25,8 @@ export async function GET(request?: NextRequest) {
     const client = createGeminiClient(apiKey);
 
     // Get filter parameter if provided
-    const searchParams = request?.nextUrl?.searchParams;
-    const filter = searchParams?.get('filter') || undefined;
+    const searchParams = request.nextUrl.searchParams;
+    const filter = searchParams.get('filter') || undefined;
 
     const models = await client.listModels({ filter });
 
