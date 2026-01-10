@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  createGeminiClient,
-  GeminiError,
-  type GeminiClient,
-} from '@/lib/gemini';
+import { createGeminiClient, GeminiError, type GeminiClient } from '@/lib/gemini';
 
 /**
  * Integration tests for Gemini API client
@@ -194,7 +190,9 @@ describe('Gemini API Client - Integration Tests', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await expect(client.generateContent('Unsafe prompt')).rejects.toThrow('Content blocked: SAFETY');
+      await expect(client.generateContent('Unsafe prompt')).rejects.toThrow(
+        'Content blocked: SAFETY'
+      );
     });
 
     it('should handle empty response from API', async () => {
@@ -610,7 +608,7 @@ describe('Gemini API Client - Integration Tests', () => {
         statusText: 'Unauthorized',
         headers: new Map([['x-request-id', 'req-123']]),
         json: async () => ({ error: { message: 'Invalid API key' } }),
-      } as Response);
+      } as unknown as Response);
 
       await expect(client.listModels()).rejects.toThrow(GeminiError);
       await expect(client.listModels()).rejects.toMatchObject({
@@ -626,7 +624,7 @@ describe('Gemini API Client - Integration Tests', () => {
         status: 403,
         statusText: 'Forbidden',
         json: async () => ({ error: { message: 'Access denied' } }),
-      } as Response);
+      } as unknown as Response);
 
       await expect(client.listModels()).rejects.toThrow('Access denied');
     });
@@ -639,7 +637,7 @@ describe('Gemini API Client - Integration Tests', () => {
         json: async () => {
           throw new Error('No JSON');
         },
-      } as Response);
+      } as unknown as Response);
 
       await expect(client.listModels()).rejects.toThrow(GeminiError);
     });

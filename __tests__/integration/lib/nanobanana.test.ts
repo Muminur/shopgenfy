@@ -618,7 +618,7 @@ describe('Nano Banana API Client - Integration Tests', () => {
         json: async () => {
           throw new Error('No JSON');
         },
-      } as Response);
+      } as unknown as Response);
 
       await expect(client.generateImage(request)).rejects.toThrow(NanoBananaError);
     });
