@@ -1,9 +1,9 @@
 'use client';
 
 import { memo } from 'react';
-import Image from 'next/image';
 import { RefreshCw, Download, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LazyImage } from '@/components/ui/LazyImage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 
@@ -45,7 +45,7 @@ export const ImagePreviewCard = memo(function ImagePreviewCard({
               <span className="mt-2 text-sm text-muted-foreground">Generating...</span>
             </div>
           ) : (
-            <Image
+            <LazyImage
               src={image.url}
               alt={image.alt}
               fill

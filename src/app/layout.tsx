@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 
 const geistSans = Geist({
@@ -52,8 +53,42 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://shopgenfy.com';
+
+  const organizationSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Shopgenfy',
+    url: appUrl,
+    description: 'AI-powered assistant to prepare and submit your apps to the Shopify App Store.',
+  };
+
+  const webApplicationSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: 'Shopgenfy',
+    url: appUrl,
+    description:
+      'AI-powered assistant to prepare and submit your apps to the Shopify App Store. Generate compliant content, images, and export packages.',
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web Browser',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
+  };
+
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <Script id="organization-jsonld" type="application/ld+json" strategy="beforeInteractive">
+          {JSON.stringify(organizationSchema)}
+        </Script>
+        <Script id="webapp-jsonld" type="application/ld+json" strategy="beforeInteractive">
+          {JSON.stringify(webApplicationSchema)}
+        </Script>
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
         {children}
       </body>
