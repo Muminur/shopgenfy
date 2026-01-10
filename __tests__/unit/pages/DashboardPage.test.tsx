@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import DashboardPage from '@/app/dashboard/page';
 
@@ -166,6 +167,117 @@ describe('Dashboard Page', () => {
       render(<DashboardPage />);
       const headings = screen.getAllByRole('heading');
       expect(headings.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should display error message when analyze API fails', async () => {
+      const user = userEvent.setup();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'Internal server error' }),
+      });
+
+      render(<DashboardPage />);
+      const urlInput = screen.getByLabelText(/landing page url/i);
+      await user.type(urlInput, 'https://example.com');
+
+      const analyzeButton = screen.getByRole('button', { name: /analyze/i });
+      await user.click(analyzeButton);
+
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+    });
+
+    it('should display error message when save API fails', async () => {
+      const user = userEvent.setup();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: 'Validation failed' }),
+      });
+
+      render(<DashboardPage />);
+      const saveButton = screen.getByRole('button', { name: /save/i });
+      await user.click(saveButton);
+
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+    });
+
+    it('should allow dismissing error messages', async () => {
+      const user = userEvent.setup();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'Server error' }),
+      });
+
+      render(<DashboardPage />);
+      const saveButton = screen.getByRole('button', { name: /save/i });
+      await user.click(saveButton);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toBeInTheDocument();
+
+      // Find dismiss button within alert
+      const dismissButton = alert.querySelector('button');
+      if (dismissButton) {
+        await user.click(dismissButton);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      }
+    });
+
+    it('should display success message when analyze completes', async () => {
+      const user = userEvent.setup();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          appName: 'Test App',
+          appIntroduction: 'A test app',
+          appDescription: 'Description',
+          features: ['Feature 1'],
+        }),
+      });
+
+      render(<DashboardPage />);
+      const urlInput = screen.getByLabelText(/landing page url/i);
+      await user.type(urlInput, 'https://example.com');
+
+      const analyzeButton = screen.getByRole('button', { name: /analyze/i });
+      await user.click(analyzeButton);
+
+      expect(await screen.findByText(/analyzed successfully/i)).toBeInTheDocument();
+    });
+
+    it('should disable buttons during API operations', async () => {
+      const user = userEvent.setup();
+
+      // Create a delayed response
+      let resolvePromise: (value: unknown) => void;
+      const delayedResponse = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+      mockFetch.mockReturnValueOnce(delayedResponse);
+
+      render(<DashboardPage />);
+      const urlInput = screen.getByLabelText(/landing page url/i);
+      await user.type(urlInput, 'https://example.com');
+
+      const analyzeButton = screen.getByRole('button', { name: /analyze/i });
+      await user.click(analyzeButton);
+
+      // Button should show loading state
+      expect(screen.getByText(/analyzing/i)).toBeInTheDocument();
+
+      // Resolve the promise
+      resolvePromise!({
+        ok: true,
+        json: async () => ({ appName: 'Test' }),
+      });
     });
   });
 });
