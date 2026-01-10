@@ -8,6 +8,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
+  GOOGLE_REFRESH_TOKEN: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
 });
 
