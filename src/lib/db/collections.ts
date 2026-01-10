@@ -27,11 +27,16 @@ export async function ensureIndexes(db: Db): Promise<void> {
   for (const [collectionName, indexes] of Object.entries(INDEXES)) {
     const collection = db.collection(collectionName);
     for (const index of indexes) {
-      await collection.createIndex(index.key, {
-        name: index.name,
-        unique: index.unique,
+      const options: { name?: string; unique?: boolean; background: boolean } = {
         background: true,
-      });
+      };
+      if (index.name) {
+        options.name = index.name;
+      }
+      if (index.unique) {
+        options.unique = true;
+      }
+      await collection.createIndex(index.key, options);
     }
   }
 }
