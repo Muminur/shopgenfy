@@ -150,7 +150,9 @@ export function createAPIVersionManager(
       if (error instanceof APIVersionManagerError) {
         throw error;
       }
-      throw new APIVersionManagerError(`Failed to check Gemini version: ${(error as Error).message}`);
+      throw new APIVersionManagerError(
+        `Failed to check Gemini version: ${(error as Error).message}`
+      );
     }
   }
 
@@ -224,7 +226,9 @@ export function createAPIVersionManager(
       const storedVersion = await getAPIVersionByService(db, 'gemini');
 
       if (!storedVersion) {
-        throw new APIVersionManagerError('No Gemini version record found. Run checkGeminiVersion first.');
+        throw new APIVersionManagerError(
+          'No Gemini version record found. Run checkGeminiVersion first.'
+        );
       }
 
       if (compareVersions(newVersion, storedVersion.currentVersion)) {
@@ -272,7 +276,9 @@ export function createAPIVersionManager(
       if (error instanceof APIVersionManagerError) {
         throw error;
       }
-      throw new APIVersionManagerError(`Failed to update Gemini version: ${(error as Error).message}`);
+      throw new APIVersionManagerError(
+        `Failed to update Gemini version: ${(error as Error).message}`
+      );
     }
   }
 
@@ -335,7 +341,9 @@ export function createAPIVersionManager(
     try {
       return await getAllAPIVersions(db);
     } catch (error) {
-      throw new APIVersionManagerError(`Failed to get version history: ${(error as Error).message}`);
+      throw new APIVersionManagerError(
+        `Failed to get version history: ${(error as Error).message}`
+      );
     }
   }
 
@@ -394,7 +402,10 @@ export function createAPIVersionManager(
     return result;
   }
 
-  async function getCurrentVersions(): Promise<{ gemini: string | null; nanobanana: string | null }> {
+  async function getCurrentVersions(): Promise<{
+    gemini: string | null;
+    nanobanana: string | null;
+  }> {
     try {
       const versions = await getAllAPIVersions(db);
 
@@ -413,7 +424,9 @@ export function createAPIVersionManager(
 
       return result;
     } catch (error) {
-      throw new APIVersionManagerError(`Failed to get current versions: ${(error as Error).message}`);
+      throw new APIVersionManagerError(
+        `Failed to get current versions: ${(error as Error).message}`
+      );
     }
   }
 
