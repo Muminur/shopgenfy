@@ -73,6 +73,7 @@ export interface NanoBananaClient {
   ): Promise<GeneratedImageResult[]>;
   getJobStatus(jobId: string): Promise<JobStatus>;
   checkVersion(): Promise<VersionInfo>;
+  regenerateImage(imageId: string): Promise<GeneratedImageResult>;
 }
 
 function getImageDimensions(type: ImageType): { width: number; height: number } {
@@ -264,10 +265,44 @@ export function createNanoBananaClient(apiKey: string): NanoBananaClient {
     return response.json();
   }
 
+  async function regenerateImage(imageId: string): Promise<GeneratedImageResult> {
+    // Import db operations dynamically to avoid circular dependencies
+    const { getImageById, updateImage } = await import('./db/images');
+
+    // Get original image metadata
+    const originalImage = await getImageById(imageId);
+    if (!originalImage) {
+      throw new NanoBananaError('Image not found');
+    }
+
+    // Regenerate with same prompt and dimensions
+    const request: ImageGenerationRequest = {
+      type: originalImage.type,
+      prompt: originalImage.generationPrompt,
+      featureHighlight: originalImage.featureHighlighted,
+    };
+
+    // Add styleSeed if available for consistency
+    const styleSeed = (originalImage as any).styleSeed;
+
+    const result = await generateImage(request);
+
+    // Update database with new image data
+    await updateImage(imageId, {
+      driveUrl: result.imageUrl || '',
+      driveFileId: result.jobId,
+      version: ((originalImage as any).version || 1) + 1,
+      ...(styleSeed && { styleSeed }),
+    });
+
+    return result;
+  }
+
   return {
     generateImage,
     generateBatch,
     getJobStatus,
     checkVersion,
+    regenerateImage,
   };
 }
