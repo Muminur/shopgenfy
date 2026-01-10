@@ -23,6 +23,21 @@ export const FORBIDDEN_PATTERNS = {
   SHOPIFY_BRANDING: /\bshopify\b/i,
 } as const;
 
+// Array of patterns for detecting superlative claims (used by some() method)
+export const SUPERLATIVE_PATTERNS: RegExp[] = [
+  /\b(best|first|#1|number one|top rated|leading|only)\b/i,
+  /\b(most|greatest|ultimate|premier|superior)\b/i,
+  /\b(world-class|industry-leading|market-leading)\b/i,
+];
+
+// Array of patterns for detecting contact information (used by some() method)
+export const CONTACT_INFO_PATTERNS: RegExp[] = [
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/, // Email
+  /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/, // Phone numbers (US format)
+  /\b(contact us|call us|email us|reach out)\b/i,
+  /\b(phone|telephone|tel|fax):\s*[\d\s-]+/i,
+];
+
 export const SHOPIFY_CATEGORIES = [
   'Store design',
   'Marketing',
