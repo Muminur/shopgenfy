@@ -1,11 +1,41 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { NextRequest } from 'next/server';
+import { clearRateLimitStore } from '@/lib/middleware/rate-limiter';
+
+// Mock MongoDB to avoid connection errors in rate limiting tests
+vi.mock('@/lib/mongodb', () => ({
+  getDatabaseConnected: vi.fn().mockResolvedValue({
+    collection: vi.fn().mockReturnValue({
+      findOne: vi.fn(),
+      updateOne: vi.fn(),
+    }),
+  }),
+}));
+
+//  Mock image DB operations to avoid actual database calls
+vi.mock('@/lib/db/images', () => ({
+  createGeneratedImage: vi.fn().mockResolvedValue({ _id: 'mock-id' }),
+}));
+
+// Mock prompt generator
+vi.mock('@/lib/prompt-generator', () => ({
+  generateBatchPrompts: vi.fn().mockReturnValue([
+    {
+      type: 'icon',
+      prompt: 'Mock icon prompt',
+      width: 1200,
+      height: 1200,
+      negativePrompt: '',
+      featureHighlighted: '',
+    },
+  ]),
+}));
+
 import { GET as getModels } from '@/app/api/gemini/models/route';
 import { POST as analyzeUrl } from '@/app/api/gemini/analyze/route';
 import { POST as generateImage } from '@/app/api/nanobanana/generate/route';
 import { GET as getStatus } from '@/app/api/nanobanana/status/[jobId]/route';
 import { POST as batchGenerate } from '@/app/api/nanobanana/batch/route';
-import { NextRequest } from 'next/server';
-import { clearRateLimitStore } from '@/lib/middleware/rate-limiter';
 
 describe('API Route Rate Limiting Integration', () => {
   beforeEach(() => {
