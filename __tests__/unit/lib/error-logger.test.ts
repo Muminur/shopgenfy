@@ -3,16 +3,14 @@ import { logError, initErrorLogging } from '@/lib/error-logger';
 
 describe('error-logger', () => {
   beforeEach(() => {
-    Object.defineProperty(process.env, 'NODE_ENV', {
-      value: 'development',
-      writable: true,
-    });
+    vi.stubEnv('NODE_ENV', 'development');
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('logError', () => {
