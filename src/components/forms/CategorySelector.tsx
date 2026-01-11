@@ -2,7 +2,11 @@ import { Label } from '@/components/ui/label';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MultiSelect, MultiSelectOption } from './MultiSelect';
-import type { Category } from '@/types';
+
+interface Category {
+  value: string;
+  label: string;
+}
 
 interface CategorySelectorProps {
   categories: Category[] | string[];
