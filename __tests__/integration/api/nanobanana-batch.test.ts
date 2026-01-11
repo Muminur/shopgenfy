@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } 
 import { NextRequest } from 'next/server';
 import { MongoClient, Db, ObjectId } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { clearRateLimitStore } from '@/lib/middleware/rate-limiter';
 
 // Mock the modules
 vi.mock('@/lib/nanobanana', () => ({
@@ -31,12 +30,6 @@ vi.mock('@/lib/mongodb', () => ({
 let mongoServer: MongoMemoryServer;
 let client: MongoClient;
 let db: Db;
-let testIpCounter = 0;
-
-// Helper to generate unique IP for each test to avoid rate limiting conflicts
-function getUniqueTestIp() {
-  return `192.168.100.${testIpCounter++}`;
-}
 
 describe('Nano Banana Batch API Routes', () => {
   beforeAll(async () => {
@@ -54,7 +47,6 @@ describe('Nano Banana Batch API Routes', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    clearRateLimitStore(); // Clear rate limiting state between tests
     process.env.NANO_BANANA_API_KEY = 'test-api-key';
 
     // Mock getDatabase to return our test db
@@ -116,10 +108,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submissionId.toString() }),
       });
 
@@ -142,10 +131,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
 
@@ -161,10 +147,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: 'invalid-id' }),
       });
 
@@ -179,10 +162,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: new ObjectId().toString() }),
       });
 
@@ -204,10 +184,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: new ObjectId().toString() }),
       });
 
@@ -261,10 +238,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submissionId.toString() }),
       });
 
@@ -324,10 +298,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submissionId.toString() }),
       });
 
@@ -363,10 +334,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submissionId.toString() }),
       });
 
@@ -420,10 +388,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submissionId.toString() }),
       });
 
@@ -481,10 +446,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submissionId.toString() }),
       });
 
@@ -501,10 +463,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: 'invalid json',
       });
 
@@ -560,10 +519,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submissionId.toString() }),
       });
 
@@ -619,10 +575,7 @@ describe('Nano Banana Batch API Routes', () => {
       const { POST } = await import('@/app/api/nanobanana/batch/route');
       const request = new NextRequest('http://localhost/api/nanobanana/batch', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-forwarded-for': getUniqueTestIp(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ submissionId: submissionId.toString() }),
       });
 

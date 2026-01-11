@@ -36,14 +36,14 @@ describe('Nano Banana - Single Image Regeneration', () => {
     vi.clearAllMocks();
     // Setup default mock implementation
     mockRegenerateImage.mockImplementation(async (imageId: string) => {
-      const original = await getImageById(imageId);
+      const original = await (getImageById as any)({}, imageId);
       if (!original) throw new Error('Image not found');
       const result = await mockGenerateImage({
         type: original.type,
         prompt: original.generationPrompt,
         featureHighlight: original.featureHighlighted,
       });
-      await updateImage(imageId, {
+      await (updateImage as any)({}, imageId, {
         driveUrl: result.imageUrl || result.url || '',
         driveFileId: result.jobId || 'job-id',
         version: ((original as any).version || 1) + 1,

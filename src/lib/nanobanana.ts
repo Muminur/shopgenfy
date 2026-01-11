@@ -266,11 +266,13 @@ export function createNanoBananaClient(apiKey: string): NanoBananaClient {
   }
 
   async function regenerateImage(imageId: string): Promise<GeneratedImageResult> {
-    // Import db operations dynamically to avoid circular dependencies
+    // Import db operations and connection dynamically to avoid circular dependencies
     const { getImageById, updateImage } = await import('./db/images');
+    const { getDatabaseConnected } = await import('./mongodb');
+    const db = await getDatabaseConnected();
 
     // Get original image metadata
-    const originalImage = await getImageById(imageId);
+    const originalImage = await getImageById(db, imageId);
     if (!originalImage) {
       throw new NanoBananaError('Image not found');
     }
@@ -288,7 +290,7 @@ export function createNanoBananaClient(apiKey: string): NanoBananaClient {
     const result = await generateImage(request);
 
     // Update database with new image data
-    await updateImage(imageId, {
+    await updateImage(db, imageId, {
       driveUrl: result.imageUrl || '',
       driveFileId: result.jobId,
       version: ((originalImage as any).version || 1) + 1,

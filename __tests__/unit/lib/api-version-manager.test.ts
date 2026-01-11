@@ -32,6 +32,7 @@ describe('API Version Manager - Unit Tests', () => {
 
     mockNanoBananaClient = {
       generateImage: vi.fn(),
+      regenerateImage: vi.fn(),
       generateBatch: vi.fn(),
       getJobStatus: vi.fn(),
       checkVersion: vi.fn(),

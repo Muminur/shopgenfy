@@ -77,6 +77,14 @@ describe('API Version Manager - Integration Tests', () => {
         height: 1200,
         format: 'png' as const,
       }),
+      regenerateImage: async (_imageId) => ({
+        jobId: 'job-regen-123',
+        status: 'completed' as const,
+        imageUrl: 'https://cdn.nanobanana.io/regen.png',
+        width: 1200,
+        height: 1200,
+        format: 'png' as const,
+      }),
       generateBatch: async (_requests, _options) => [],
       getJobStatus: async (jobId) => ({
         jobId,
