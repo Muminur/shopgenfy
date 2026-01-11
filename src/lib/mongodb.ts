@@ -1,14 +1,18 @@
 import { MongoClient, Db } from 'mongodb';
 
-const MONGODB_URI = process.env.MONGODB_URI;
-const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME;
+function getMongoConfig() {
+  const MONGODB_URI = process.env.MONGODB_URI;
+  const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME;
 
-if (!MONGODB_URI) {
-  throw new Error('MONGODB_URI environment variable is not defined');
-}
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI environment variable is not defined');
+  }
 
-if (!MONGODB_DB_NAME) {
-  throw new Error('MONGODB_DB_NAME environment variable is not defined');
+  if (!MONGODB_DB_NAME) {
+    throw new Error('MONGODB_DB_NAME environment variable is not defined');
+  }
+
+  return { MONGODB_URI, MONGODB_DB_NAME };
 }
 
 const options = {
@@ -29,15 +33,17 @@ declare global {
 }
 
 export function getMongoClient(): MongoClient {
+  const { MONGODB_URI } = getMongoConfig();
+
   if (process.env.NODE_ENV === 'development') {
     if (!global._mongoClient) {
-      global._mongoClient = new MongoClient(MONGODB_URI!, options);
+      global._mongoClient = new MongoClient(MONGODB_URI, options);
     }
     return global._mongoClient;
   }
 
   if (!client) {
-    client = new MongoClient(MONGODB_URI!, options);
+    client = new MongoClient(MONGODB_URI, options);
   }
   return client;
 }
@@ -59,11 +65,13 @@ export async function connectToDatabase(): Promise<MongoClient> {
 }
 
 export function getDatabase(): Db {
+  const { MONGODB_DB_NAME } = getMongoConfig();
   const mongoClient = getMongoClient();
   return mongoClient.db(MONGODB_DB_NAME);
 }
 
 export async function getDatabaseConnected(): Promise<Db> {
+  const { MONGODB_DB_NAME } = getMongoConfig();
   const mongoClient = await connectToDatabase();
   return mongoClient.db(MONGODB_DB_NAME);
 }

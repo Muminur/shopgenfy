@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGeminiClient, GeminiError } from '@/lib/gemini';
+import { withCacheHeaders, CachePresets } from '@/lib/cache';
 
 export async function GET(request?: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -17,7 +18,10 @@ export async function GET(request?: NextRequest) {
 
     const models = await client.listModels({ filter });
 
-    return NextResponse.json({ models });
+    const response = NextResponse.json({ models });
+
+    // Cache models list for 1 hour (models don't change frequently)
+    return withCacheHeaders(response, CachePresets.PUBLIC_MEDIUM);
   } catch (error) {
     if (error instanceof GeminiError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode || 500 });
