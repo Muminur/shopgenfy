@@ -142,7 +142,7 @@ export function MultiSelect({
                 return (
                   <CommandItem
                     key={option.value}
-                    value={option.value}
+                    data-value={option.value}
                     onClick={() => handleSelect(option.value)}
                     role="option"
                     aria-selected={isSelected}
