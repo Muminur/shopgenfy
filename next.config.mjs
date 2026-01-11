@@ -24,10 +24,8 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 
-  // Turbopack config (Next.js 16+ default bundler)
-  turbopack: {
-    // Bundle splitting and optimization handled by Turbopack
-  },
+  // Enable Turbopack (Next.js 16+)
+  turbopack: {},
 };
 
 export default nextConfig;
