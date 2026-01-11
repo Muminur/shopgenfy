@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createNanoBananaClient, NanoBananaError } from '@/lib/nanobanana';
 import { z } from 'zod';
+import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
 
 const generateImageSchema = z.object({
   type: z.enum(['icon', 'feature'], { message: 'Image type must be "icon" or "feature"' }),
@@ -10,7 +11,15 @@ const generateImageSchema = z.object({
   negativePrompt: z.string().optional(),
 });
 
+const rateLimiter = createRateLimiter(rateLimitConfigs.nanobanana.generate);
+
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = await rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const apiKey = process.env.NANO_BANANA_API_KEY;
 
   if (!apiKey) {
