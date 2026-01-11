@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGeminiClient, GeminiError } from '@/lib/gemini';
+import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
+
+const rateLimiter = createRateLimiter(rateLimitConfigs.gemini.analyze);
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = await rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {

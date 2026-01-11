@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { MongoClient, Db } from 'mongodb';
-import {
-  createAPIVersionManager,
-  type APIVersionManager,
-} from '@/lib/api-version-manager';
+import { createAPIVersionManager, type APIVersionManager } from '@/lib/api-version-manager';
 import { type GeminiClient } from '@/lib/gemini';
 import { type NanoBananaClient } from '@/lib/nanobanana';
 import { COLLECTIONS } from '@/lib/db/collections';
@@ -117,7 +114,9 @@ describe('API Version Manager - Integration Tests', () => {
       expect(result.currentVersion).toBe('2.0.0');
       expect(result.latestVersion).toBe('2.0.0');
 
-      const stored = await db.collection(COLLECTIONS.API_VERSIONS).findOne({ service: 'nanobanana' });
+      const stored = await db
+        .collection(COLLECTIONS.API_VERSIONS)
+        .findOne({ service: 'nanobanana' });
       expect(stored).toBeDefined();
       expect(stored?.currentVersion).toBe('2.0.0');
     });
@@ -201,7 +200,9 @@ describe('API Version Manager - Integration Tests', () => {
       expect(updateResult.success).toBe(true);
       expect(updateResult.version).toBe('2.1.0');
 
-      const stored = await db.collection(COLLECTIONS.API_VERSIONS).findOne({ service: 'nanobanana' });
+      const stored = await db
+        .collection(COLLECTIONS.API_VERSIONS)
+        .findOne({ service: 'nanobanana' });
       expect(stored?.currentVersion).toBe('2.1.0');
       expect(stored?.lastKnownGood).toBe('2.1.0');
     });
@@ -219,7 +220,9 @@ describe('API Version Manager - Integration Tests', () => {
       expect(updateResult.rolledBack).toBe(true);
       expect(updateResult.version).toBe('2.0.0');
 
-      const stored = await db.collection(COLLECTIONS.API_VERSIONS).findOne({ service: 'nanobanana' });
+      const stored = await db
+        .collection(COLLECTIONS.API_VERSIONS)
+        .findOne({ service: 'nanobanana' });
       expect(stored?.currentVersion).toBe('2.0.0');
     });
   });
@@ -443,7 +446,9 @@ describe('API Version Manager - Integration Tests', () => {
       await manager.checkGeminiVersion();
       await manager.updateGeminiVersion('v2');
 
-      const firstCheck = await db.collection(COLLECTIONS.API_VERSIONS).findOne({ service: 'gemini' });
+      const firstCheck = await db
+        .collection(COLLECTIONS.API_VERSIONS)
+        .findOne({ service: 'gemini' });
       expect(firstCheck?.lastKnownGood).toBe('v2');
 
       mockGeminiClient.generateContent = async () => {
@@ -456,7 +461,9 @@ describe('API Version Manager - Integration Tests', () => {
       expect(updateResult.version).toBe('v2');
       expect(updateResult.rolledBack).toBe(true);
 
-      const afterFailed = await db.collection(COLLECTIONS.API_VERSIONS).findOne({ service: 'gemini' });
+      const afterFailed = await db
+        .collection(COLLECTIONS.API_VERSIONS)
+        .findOne({ service: 'gemini' });
       expect(afterFailed?.currentVersion).toBe('v2');
       expect(afterFailed?.lastKnownGood).toBe('v2');
     });
@@ -469,15 +476,18 @@ describe('API Version Manager - Integration Tests', () => {
         throw new Error('Failure');
       };
 
+      // Attempt to update to v3, which will fail health check
       await manager.updateGeminiVersion('v3');
 
       const history = await manager.getVersionHistory();
       const geminiVersion = history.find((h) => h.service === 'gemini');
 
+      // Failed versions should not be added to availableVersions
       expect(geminiVersion?.availableVersions).toContain('v1beta');
       expect(geminiVersion?.availableVersions).toContain('v2');
-      expect(geminiVersion?.availableVersions).toContain('v3');
+      expect(geminiVersion?.availableVersions).not.toContain('v3');
       expect(geminiVersion?.currentVersion).toBe('v2');
+      expect(geminiVersion?.lastKnownGood).toBe('v2');
     });
   });
 });

@@ -6,6 +6,7 @@ import { getDatabaseConnected } from '@/lib/mongodb';
 import { createGeneratedImage, CreateImageInput } from '@/lib/db/images';
 import { generateBatchPrompts, GeneratedPrompt } from '@/lib/prompt-generator';
 import { COLLECTIONS } from '@/lib/db/collections';
+import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
 
 const batchRequestSchema = z.object({
   submissionId: z
@@ -34,7 +35,15 @@ interface BatchImageResult {
   featureHighlighted?: string;
 }
 
+const rateLimiter = createRateLimiter(rateLimitConfigs.nanobanana.batch);
+
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = await rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const apiKey = process.env.NANO_BANANA_API_KEY;
 
   if (!apiKey) {

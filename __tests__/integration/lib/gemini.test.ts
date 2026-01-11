@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import {
-  createGeminiClient,
-  GeminiError,
-  type GeminiClient,
-} from '@/lib/gemini';
+import { createGeminiClient, GeminiError, type GeminiClient } from '@/lib/gemini';
 
 /**
  * Integration tests for Gemini API client
@@ -194,7 +190,9 @@ describe('Gemini API Client - Integration Tests', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await expect(client.generateContent('Unsafe prompt')).rejects.toThrow('Content blocked: SAFETY');
+      await expect(client.generateContent('Unsafe prompt')).rejects.toThrow(
+        'Content blocked: SAFETY'
+      );
     });
 
     it('should handle empty response from API', async () => {
@@ -604,29 +602,38 @@ describe('Gemini API Client - Integration Tests', () => {
 
   describe('Error Handling - API Integration', () => {
     it('should handle 401 unauthorized errors', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      const mockHeaders = new Headers();
+      mockHeaders.set('x-request-id', 'req-123');
+
+      global.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 401,
         statusText: 'Unauthorized',
-        headers: new Map([['x-request-id', 'req-123']]),
+        headers: mockHeaders,
         json: async () => ({ error: { message: 'Invalid API key' } }),
-      } as Response);
+      } as unknown as Response);
 
       await expect(client.listModels()).rejects.toThrow(GeminiError);
-      await expect(client.listModels()).rejects.toMatchObject({
-        message: 'Invalid API key',
-        statusCode: 401,
-        requestId: 'req-123',
-      });
+
+      try {
+        await client.listModels();
+      } catch (error) {
+        expect(error).toMatchObject({
+          message: 'Invalid API key',
+          statusCode: 401,
+          requestId: 'req-123',
+        });
+      }
     });
 
     it('should handle 403 forbidden errors', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      global.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 403,
         statusText: 'Forbidden',
+        headers: new Headers(),
         json: async () => ({ error: { message: 'Access denied' } }),
-      } as Response);
+      } as unknown as Response);
 
       await expect(client.listModels()).rejects.toThrow('Access denied');
     });
@@ -639,7 +646,7 @@ describe('Gemini API Client - Integration Tests', () => {
         json: async () => {
           throw new Error('No JSON');
         },
-      } as Response);
+      } as unknown as Response);
 
       await expect(client.listModels()).rejects.toThrow(GeminiError);
     });
