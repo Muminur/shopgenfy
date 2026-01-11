@@ -39,14 +39,16 @@ describe('MongoDB Connection', () => {
       vi.stubEnv('MONGODB_URI', '');
       vi.resetModules();
 
-      await expect(import('@/lib/mongodb')).rejects.toThrow();
+      const { getMongoClient } = await import('@/lib/mongodb');
+      expect(() => getMongoClient()).toThrow('MONGODB_URI environment variable is not defined');
     });
 
     it('should throw error when MONGODB_DB_NAME is missing', async () => {
       vi.stubEnv('MONGODB_DB_NAME', '');
       vi.resetModules();
 
-      await expect(import('@/lib/mongodb')).rejects.toThrow();
+      const { getDatabase } = await import('@/lib/mongodb');
+      expect(() => getDatabase()).toThrow('MONGODB_DB_NAME environment variable is not defined');
     });
   });
 });
