@@ -30,6 +30,17 @@ vi.mock('@/lib/db/images', () => ({
 
 vi.mock('@/lib/middleware/rate-limiter', () => ({
   createRateLimiter: vi.fn(() => vi.fn(() => Promise.resolve({ success: true }))),
+  rateLimitConfigs: {
+    gemini: {
+      models: { requests: 30, windowMs: 60000 },
+      analyze: { requests: 10, windowMs: 60000 },
+    },
+    nanobanana: {
+      generate: { requests: 5, windowMs: 60000 },
+      status: { requests: 60, windowMs: 60000 },
+      batch: { requests: 2, windowMs: 60000 },
+    },
+  },
 }));
 
 import { createNanoBananaClient } from '@/lib/nanobanana';
@@ -86,7 +97,7 @@ describe('Nano Banana - Single Image Regeneration', () => {
       const client = createNanoBananaClient('test-api-key');
       const result = await client.regenerateImage('img-123');
 
-      expect(getImageById).toHaveBeenCalledWith('img-123');
+      expect(getImageById).toHaveBeenCalledWith({}, 'img-123');
       expect(mockGenerateImage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'feature',
@@ -183,6 +194,7 @@ describe('Nano Banana - Single Image Regeneration', () => {
       await client.regenerateImage('img-999');
 
       expect(updateImage).toHaveBeenCalledWith(
+        {},
         'img-999',
         expect.objectContaining({
           version: 2,
@@ -249,6 +261,7 @@ describe('Nano Banana - Single Image Regeneration', () => {
       await client.regenerateImage('img-update');
 
       expect(updateImage).toHaveBeenCalledWith(
+        {},
         'img-update',
         expect.objectContaining({
           driveUrl: mockNewImage.imageUrl,
