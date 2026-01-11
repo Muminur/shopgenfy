@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Db } from 'mongodb';
-import {
-  createAPIVersionManager,
-  type APIVersionManager,
-} from '@/lib/api-version-manager';
+import { createAPIVersionManager, type APIVersionManager } from '@/lib/api-version-manager';
 import type { GeminiClient } from '@/lib/gemini';
 import type { NanoBananaClient } from '@/lib/nanobanana';
 
@@ -63,10 +60,14 @@ describe('API Version Manager - Unit Tests', () => {
         findOneAndUpdate: vi.fn(),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
-      mockGeminiClient.listModels = vi.fn().mockResolvedValueOnce([
-        { name: 'models/gemini-pro', supportedGenerationMethods: ['generateContent'] },
-      ]);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
+      mockGeminiClient.listModels = vi
+        .fn()
+        .mockResolvedValueOnce([
+          { name: 'models/gemini-pro', supportedGenerationMethods: ['generateContent'] },
+        ]);
 
       const result = await manager.checkGeminiVersion();
 
@@ -91,10 +92,14 @@ describe('API Version Manager - Unit Tests', () => {
         findOneAndUpdate: vi.fn().mockResolvedValueOnce(mockStoredVersion),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
-      mockGeminiClient.listModels = vi.fn().mockResolvedValueOnce([
-        { name: 'models/gemini-pro-v2', supportedGenerationMethods: ['generateContent'] },
-      ]);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
+      mockGeminiClient.listModels = vi
+        .fn()
+        .mockResolvedValueOnce([
+          { name: 'models/gemini-pro-v2', supportedGenerationMethods: ['generateContent'] },
+        ]);
 
       const result = await manager.checkGeminiVersion();
 
@@ -108,10 +113,14 @@ describe('API Version Manager - Unit Tests', () => {
         insertOne: vi.fn().mockResolvedValueOnce({ insertedId: 'new-id' }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
-      mockGeminiClient.listModels = vi.fn().mockResolvedValueOnce([
-        { name: 'models/gemini-pro', supportedGenerationMethods: ['generateContent'] },
-      ]);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
+      mockGeminiClient.listModels = vi
+        .fn()
+        .mockResolvedValueOnce([
+          { name: 'models/gemini-pro', supportedGenerationMethods: ['generateContent'] },
+        ]);
 
       const result = await manager.checkGeminiVersion();
 
@@ -130,7 +139,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockGeminiClient.listModels = vi.fn().mockRejectedValueOnce(new Error('API unavailable'));
 
       await expect(manager.checkGeminiVersion()).rejects.toThrow('Failed to check Gemini version');
@@ -153,7 +164,9 @@ describe('API Version Manager - Unit Tests', () => {
         findOneAndUpdate: vi.fn(),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockNanoBananaClient.checkVersion = vi.fn().mockResolvedValueOnce({
         version: '2.0.0',
         releaseDate: '2026-01-01',
@@ -182,7 +195,9 @@ describe('API Version Manager - Unit Tests', () => {
         findOneAndUpdate: vi.fn().mockResolvedValueOnce(mockStoredVersion),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockNanoBananaClient.checkVersion = vi.fn().mockResolvedValueOnce({
         version: '2.1.0',
         releaseDate: '2026-01-10',
@@ -201,7 +216,9 @@ describe('API Version Manager - Unit Tests', () => {
         insertOne: vi.fn().mockResolvedValueOnce({ insertedId: 'new-id' }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockNanoBananaClient.checkVersion = vi.fn().mockResolvedValueOnce({
         version: '2.0.0',
         releaseDate: '2026-01-01',
@@ -217,7 +234,9 @@ describe('API Version Manager - Unit Tests', () => {
 
   describe('updateGeminiVersion', () => {
     it('should update to new version after health check', async () => {
-      const mockObjectId = { toString: () => 'gemini-version-id' };
+      // Use a valid ObjectId string (24 hex characters)
+      const validObjectIdString = '507f1f77bcf86cd799439011';
+      const mockObjectId = { toString: () => validObjectIdString };
       const mockCollection = {
         findOne: vi.fn().mockResolvedValueOnce({
           _id: mockObjectId,
@@ -237,7 +256,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockGeminiClient.generateContent = vi.fn().mockResolvedValueOnce({
         text: 'Health check success',
         finishReason: 'STOP',
@@ -248,6 +269,8 @@ describe('API Version Manager - Unit Tests', () => {
 
       expect(result.success).toBe(true);
       expect(result.version).toBe('v2');
+      expect(collectionSpy).toHaveBeenCalled();
+      expect(mockCollection.findOne).toHaveBeenCalled();
       expect(mockCollection.findOneAndUpdate).toHaveBeenCalled();
     });
 
@@ -263,8 +286,12 @@ describe('API Version Manager - Unit Tests', () => {
         findOneAndUpdate: vi.fn(),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
-      mockGeminiClient.generateContent = vi.fn().mockRejectedValueOnce(new Error('Health check failed'));
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
+      mockGeminiClient.generateContent = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Health check failed'));
 
       const result = await manager.updateGeminiVersion('v2');
 
@@ -275,7 +302,9 @@ describe('API Version Manager - Unit Tests', () => {
     });
 
     it('should update lastKnownGood on successful update', async () => {
-      const mockObjectId = { toString: () => 'gemini-version-id' };
+      // Use a valid ObjectId string (24 hex characters)
+      const validObjectIdString = '507f1f77bcf86cd799439012';
+      const mockObjectId = { toString: () => validObjectIdString };
       const mockCollection = {
         findOne: vi.fn().mockResolvedValueOnce({
           _id: mockObjectId,
@@ -295,7 +324,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockGeminiClient.generateContent = vi.fn().mockResolvedValueOnce({
         text: 'Health check success',
         finishReason: 'STOP',
@@ -333,7 +364,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockNanoBananaClient.checkVersion = vi.fn().mockResolvedValueOnce({
         version: '2.1.0',
         releaseDate: '2026-01-10',
@@ -358,8 +391,12 @@ describe('API Version Manager - Unit Tests', () => {
         findOneAndUpdate: vi.fn(),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
-      mockNanoBananaClient.checkVersion = vi.fn().mockRejectedValueOnce(new Error('Health check failed'));
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
+      mockNanoBananaClient.checkVersion = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Health check failed'));
 
       const result = await manager.updateNanoBananaVersion('2.1.0');
 
@@ -398,7 +435,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
 
       const history = await manager.getVersionHistory();
 
@@ -416,7 +455,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
 
       const history = await manager.getVersionHistory();
 
@@ -454,7 +495,9 @@ describe('API Version Manager - Unit Tests', () => {
         findOneAndUpdate: vi.fn(),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockGeminiClient.listModels = vi.fn().mockResolvedValueOnce([
         {
           name: 'models/gemini-pro',
@@ -501,7 +544,9 @@ describe('API Version Manager - Unit Tests', () => {
         findOneAndUpdate: vi.fn(),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
       mockNanoBananaClient.checkVersion = vi.fn().mockResolvedValueOnce({
         version: '2.0.0',
         releaseDate: '2026-01-01',
@@ -545,7 +590,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
 
       const versions = await manager.getCurrentVersions();
 
@@ -564,7 +611,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
 
       const versions = await manager.getCurrentVersions();
 
@@ -599,7 +648,9 @@ describe('API Version Manager - Unit Tests', () => {
         }),
       };
 
-      mockDb.collection = vi.fn().mockReturnValue(mockCollection);
+      // Ensure collection() always returns the same mock instance
+      const collectionSpy = vi.fn().mockReturnValue(mockCollection);
+      mockDb.collection = collectionSpy;
 
       await expect(manager.updateGeminiVersion('v1beta')).rejects.toThrow('Cannot downgrade');
     });
