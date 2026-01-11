@@ -28,6 +28,10 @@ vi.mock('@/lib/db/images', () => ({
   getImageById: vi.fn(),
 }));
 
+vi.mock('@/lib/middleware/rate-limiter', () => ({
+  createRateLimiter: vi.fn(() => vi.fn(() => Promise.resolve({ success: true }))),
+}));
+
 import { createNanoBananaClient } from '@/lib/nanobanana';
 import { updateImage, getImageById } from '@/lib/db/images';
 

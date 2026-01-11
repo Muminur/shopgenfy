@@ -27,6 +27,10 @@ vi.mock('@/lib/mongodb', () => ({
   connectToDatabase: vi.fn(),
 }));
 
+vi.mock('@/lib/middleware/rate-limiter', () => ({
+  createRateLimiter: vi.fn(() => vi.fn(() => Promise.resolve({ success: true }))),
+}));
+
 let mongoServer: MongoMemoryServer;
 let client: MongoClient;
 let db: Db;
