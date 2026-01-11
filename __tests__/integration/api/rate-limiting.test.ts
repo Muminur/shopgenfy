@@ -31,6 +31,73 @@ vi.mock('@/lib/prompt-generator', () => ({
   ]),
 }));
 
+// Mock Gemini client to avoid actual API calls
+vi.mock('@/lib/gemini', () => ({
+  createGeminiClient: vi.fn(() => ({
+    listModels: vi.fn().mockResolvedValue([
+      {
+        name: 'models/gemini-pro',
+        displayName: 'Gemini Pro',
+        description: 'Test model',
+        inputTokenLimit: 30720,
+        outputTokenLimit: 2048,
+        supportedGenerationMethods: ['generateContent'],
+      },
+    ]),
+    analyzeUrl: vi.fn().mockResolvedValue({
+      appName: 'Test App',
+      appIntroduction: 'Test intro',
+      appDescription: 'Test description',
+      featureList: ['Feature 1', 'Feature 2'],
+      languages: ['en'],
+      primaryCategory: 'Sales and marketing',
+      featureTags: ['analytics'],
+      pricing: { type: 'free' },
+      confidence: 0.9,
+    }),
+  })),
+  GeminiError: class GeminiError extends Error {
+    constructor(
+      message: string,
+      public statusCode?: number
+    ) {
+      super(message);
+      this.name = 'GeminiError';
+    }
+  },
+}));
+
+// Mock Nano Banana client to avoid actual API calls
+vi.mock('@/lib/nanobanana', () => ({
+  createNanoBananaClient: vi.fn(() => ({
+    generateImage: vi.fn().mockResolvedValue({
+      jobId: 'test-job-123',
+      status: 'queued',
+    }),
+    getJobStatus: vi.fn().mockResolvedValue({
+      jobId: 'test-job-123',
+      status: 'completed',
+      imageUrl: 'https://example.com/image.png',
+    }),
+    batchGenerate: vi.fn().mockResolvedValue({
+      batchId: 'batch-123',
+      jobs: [
+        { jobId: 'job-1', status: 'queued' },
+        { jobId: 'job-2', status: 'queued' },
+      ],
+    }),
+  })),
+  NanoBananaError: class NanoBananaError extends Error {
+    constructor(
+      message: string,
+      public statusCode?: number
+    ) {
+      super(message);
+      this.name = 'NanoBananaError';
+    }
+  },
+}));
+
 import { GET as getModels } from '@/app/api/gemini/models/route';
 import { POST as analyzeUrl } from '@/app/api/gemini/analyze/route';
 import { POST as generateImage } from '@/app/api/nanobanana/generate/route';
