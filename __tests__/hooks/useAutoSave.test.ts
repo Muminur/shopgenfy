@@ -1,4 +1,4 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useAutoSave } from '@/hooks/useAutoSave';
 
@@ -36,14 +36,12 @@ describe('useAutoSave Hook', () => {
 
     // Fast-forward time by 30 seconds
     await act(async () => {
-      vi.advanceTimersByTime(30000);
+      await vi.runAllTimersAsync();
     });
 
     // saveFn should be called only once with the latest data
-    await waitFor(() => {
-      expect(saveFn).toHaveBeenCalledTimes(1);
-      expect(saveFn).toHaveBeenCalledWith('update3');
-    });
+    expect(saveFn).toHaveBeenCalledTimes(1);
+    expect(saveFn).toHaveBeenCalledWith('update3');
   });
 
   it('should save after 30 seconds of inactivity by default', async () => {
@@ -56,12 +54,10 @@ describe('useAutoSave Hook', () => {
 
     // Fast-forward by 30 seconds
     await act(async () => {
-      vi.advanceTimersByTime(30000);
+      await vi.runAllTimersAsync();
     });
 
-    await waitFor(() => {
-      expect(saveFn).toHaveBeenCalledWith('updated');
-    });
+    expect(saveFn).toHaveBeenCalledWith('updated');
   });
 
   it('should not save if data has not changed', async () => {
@@ -92,21 +88,20 @@ describe('useAutoSave Hook', () => {
     rerender({ data: 'updated' });
 
     await act(async () => {
-      vi.advanceTimersByTime(30000);
+      await vi.runAllTimersAsync();
     });
 
-    await waitFor(() => {
-      expect(result.current.status).toBe('error');
-    });
+    expect(result.current.status).toBe('error');
 
     consoleError.mockRestore();
   });
 
   it('should show saving status during save operation', async () => {
+    let resolveSave: (() => void) | undefined;
     const saveFn = vi.fn(
       () =>
         new Promise<void>((resolve) => {
-          setTimeout(resolve, 1000);
+          resolveSave = resolve;
         })
     );
 
@@ -117,7 +112,7 @@ describe('useAutoSave Hook', () => {
     rerender({ data: 'updated' });
 
     await act(async () => {
-      vi.advanceTimersByTime(30000);
+      await vi.runAllTimersAsync();
     });
 
     // Should be saving
@@ -125,12 +120,10 @@ describe('useAutoSave Hook', () => {
 
     // Complete the save
     await act(async () => {
-      vi.advanceTimersByTime(1000);
+      resolveSave?.();
     });
 
-    await waitFor(() => {
-      expect(result.current.status).toBe('saved');
-    });
+    expect(result.current.status).toBe('saved');
   });
 
   it('should update lastSaved timestamp after successful save', async () => {
@@ -144,12 +137,10 @@ describe('useAutoSave Hook', () => {
     rerender({ data: 'updated' });
 
     await act(async () => {
-      vi.advanceTimersByTime(30000);
+      await vi.runAllTimersAsync();
     });
 
-    await waitFor(() => {
-      expect(result.current.lastSaved).toBeInstanceOf(Date);
-    });
+    expect(result.current.lastSaved).toBeInstanceOf(Date);
   });
 
   it('should allow manual save trigger', async () => {
@@ -214,12 +205,10 @@ describe('useAutoSave Hook', () => {
 
     // Should save at 10 seconds
     await act(async () => {
-      vi.advanceTimersByTime(5000);
+      await vi.runAllTimersAsync();
     });
 
-    await waitFor(() => {
-      expect(saveFn).toHaveBeenCalledWith('updated');
-    });
+    expect(saveFn).toHaveBeenCalledWith('updated');
   });
 
   it('should allow disabling auto-save', async () => {
