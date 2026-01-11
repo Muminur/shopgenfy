@@ -123,7 +123,7 @@ export function CategorySelector({
         options={tagOptions}
         value={tags}
         onChange={onTagsChange}
-        maxSelections={maxTags}
+        maxItems={maxTags}
         placeholder="Select feature tags..."
         helperText={`Choose up to ${maxTags} tags that describe your app's key features`}
       />
