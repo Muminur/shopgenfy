@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CharacterCountInput } from '@/components/forms/CharacterCountInput';
 import { CharacterCountTextarea } from '@/components/forms/CharacterCountTextarea';
 import { URLInput } from '@/components/forms/URLInput';
 import { FeatureListEditor } from '@/components/forms/FeatureListEditor';
+import { MultiSelect } from '@/components/forms/MultiSelect';
+import { CategorySelect } from '@/components/forms/CategorySelect';
+import { PricingBuilder } from '@/components/forms/PricingBuilder';
 import { ImageGallery } from '@/components/images/ImageGallery';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ProgressBar } from '@/components/feedback/ProgressBar';
@@ -13,7 +16,9 @@ import { AlertMessage } from '@/components/feedback/AlertMessage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Sparkles, Download, Save, Globe, ImageIcon, Loader2 } from 'lucide-react';
+import { Sparkles, Download, Save, Globe, ImageIcon, Loader2, Languages, Tag } from 'lucide-react';
+import { SUPPORTED_LANGUAGES, SHOPIFY_INTEGRATIONS } from '@/lib/validators/constants';
+import { PricingConfig } from '@/types';
 
 interface FormData {
   landingPageUrl: string;
@@ -21,6 +26,11 @@ interface FormData {
   appIntroduction: string;
   appDescription: string;
   features: string[];
+  languages: string[];
+  worksWith: string[];
+  primaryCategory: string;
+  secondaryCategory: string;
+  pricing: PricingConfig;
 }
 
 const initialFormData: FormData = {
@@ -29,6 +39,11 @@ const initialFormData: FormData = {
   appIntroduction: '',
   appDescription: '',
   features: [''],
+  languages: [],
+  worksWith: [],
+  primaryCategory: '',
+  secondaryCategory: '',
+  pricing: { type: 'free' },
 };
 
 // Shopify character limits
@@ -202,6 +217,69 @@ export default function DashboardPage() {
     setFormData((prev) => ({ ...prev, features }));
   }, []);
 
+  // NEW: Handlers for languages, integrations, categories, and pricing
+  const handleLanguagesChange = useCallback((languages: string[]) => {
+    setFormData((prev) => ({ ...prev, languages }));
+  }, []);
+
+  const handleWorksWithChange = useCallback((worksWith: string[]) => {
+    setFormData((prev) => ({ ...prev, worksWith }));
+  }, []);
+
+  const handlePrimaryCategoryChange = useCallback((primaryCategory: string) => {
+    setFormData((prev) => ({ ...prev, primaryCategory }));
+  }, []);
+
+  const handleSecondaryCategoryChange = useCallback((secondaryCategory: string) => {
+    setFormData((prev) => ({ ...prev, secondaryCategory }));
+  }, []);
+
+  const handlePricingChange = useCallback((pricing: PricingConfig) => {
+    setFormData((prev) => ({ ...prev, pricing }));
+  }, []);
+
+  // Auto-save functionality
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasUserInteractedRef = useRef(false);
+
+  useEffect(() => {
+    // Don't auto-save on initial render
+    if (!hasUserInteractedRef.current) {
+      hasUserInteractedRef.current = true;
+      return;
+    }
+
+    // Clear existing timer
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    // Set new timer for auto-save (30 seconds debounce)
+    autoSaveTimerRef.current = setTimeout(async () => {
+      if (formData.appName || formData.appIntroduction) {
+        try {
+          await fetch('/api/submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...formData,
+              status: 'draft',
+            }),
+          });
+        } catch (error) {
+          // Silent fail for auto-save
+          console.error('Auto-save failed:', error);
+        }
+      }
+    }, 30000);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [formData]);
+
   const progress = calculateProgress();
 
   // Secure URL validation - prevents XSS and ensures proper protocol
@@ -339,6 +417,81 @@ export default function DashboardPage() {
                   maxCharPerItem={LIMITS.featureItem}
                   helperText="Each feature should highlight a unique capability"
                 />
+              </CardContent>
+            </Card>
+
+            {/* Languages & Integrations */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Languages className="h-5 w-5" />
+                  Languages & Integrations
+                </CardTitle>
+                <CardDescription>Languages supported and integrations</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <MultiSelect
+                  label="Languages"
+                  options={SUPPORTED_LANGUAGES.map((lang) => ({
+                    value: lang.code,
+                    label: lang.name,
+                  }))}
+                  value={formData.languages}
+                  onChange={handleLanguagesChange}
+                  placeholder="Select supported languages"
+                  helperText="Languages your app supports"
+                />
+
+                <MultiSelect
+                  label="Works With"
+                  options={SHOPIFY_INTEGRATIONS.map((integration) => ({
+                    value: integration,
+                    label: integration,
+                  }))}
+                  value={formData.worksWith}
+                  onChange={handleWorksWithChange}
+                  placeholder="Select integrations"
+                  maxItems={6}
+                  helperText="Maximum 6 Shopify integrations"
+                />
+              </CardContent>
+            </Card>
+
+            {/* Categories */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Tag className="h-5 w-5" />
+                  Categories
+                </CardTitle>
+                <CardDescription>App Store categories</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <CategorySelect
+                  label="Primary Category"
+                  value={formData.primaryCategory}
+                  onChange={handlePrimaryCategoryChange}
+                  placeholder="Select primary category"
+                />
+
+                <CategorySelect
+                  label="Secondary Category"
+                  value={formData.secondaryCategory}
+                  onChange={handleSecondaryCategoryChange}
+                  placeholder="Select secondary category"
+                  optional
+                />
+              </CardContent>
+            </Card>
+
+            {/* Pricing */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Pricing</CardTitle>
+                <CardDescription>Configure your app pricing model</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PricingBuilder value={formData.pricing} onChange={handlePricingChange} />
               </CardContent>
             </Card>
           </div>
