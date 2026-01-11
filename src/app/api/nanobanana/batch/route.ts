@@ -35,11 +35,18 @@ interface BatchImageResult {
   featureHighlighted?: string;
 }
 
-const rateLimiter = createRateLimiter(rateLimitConfigs.nanobanana.batch);
+let rateLimiter: ReturnType<typeof createRateLimiter> | null = null;
+
+function getRateLimiter() {
+  if (!rateLimiter) {
+    rateLimiter = createRateLimiter(rateLimitConfigs.nanobanana.batch);
+  }
+  return rateLimiter;
+}
 
 export async function POST(request: NextRequest) {
   // Apply rate limiting
-  const rateLimitResponse = await rateLimiter(request);
+  const rateLimitResponse = await getRateLimiter()(request);
   if (rateLimitResponse) {
     return rateLimitResponse;
   }

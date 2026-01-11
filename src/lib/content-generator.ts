@@ -61,9 +61,25 @@ export interface RegenerateFieldResult {
   error?: string;
 }
 
+export interface AltTextInput {
+  imageType: 'icon' | 'feature';
+  appName: string;
+  featureHighlighted?: string;
+  generationPrompt: string;
+}
+
+export interface AltTextResult {
+  success: boolean;
+  altText?: string;
+  fallbackAltText?: string;
+  error?: string;
+}
+
 export interface ContentGenerator {
   generateFromUrl(url: string): Promise<ContentGenerationResult>;
   regenerateField(input: RegenerateFieldInput): Promise<RegenerateFieldResult>;
+  regenerateAnalysis(url: string): Promise<ContentGenerationResult>;
+  generateAltText(input: AltTextInput): Promise<AltTextResult>;
 }
 
 function sanitizeText(text: string): string {
@@ -358,8 +374,82 @@ Return ONLY the new text, nothing else.`;
     }
   }
 
+  async function regenerateAnalysis(url: string): Promise<ContentGenerationResult> {
+    // Simply re-run the analysis with the same URL
+    return generateFromUrl(url);
+  }
+
+  async function generateAltText(input: AltTextInput): Promise<AltTextResult> {
+    const { imageType, appName, featureHighlighted, generationPrompt } = input;
+
+    const prompt = `Generate a concise, descriptive alt text for accessibility (max 200 characters) for this ${imageType} image:
+
+App Name: ${appName}
+${featureHighlighted ? `Feature: ${featureHighlighted}` : ''}
+Image Prompt: ${generationPrompt}
+
+Requirements:
+- Describe what's visually shown, not just labels
+- No "image of" or "picture of" prefixes
+- No Shopify branding
+- Focus on content and purpose
+- Maximum 200 characters
+
+Return ONLY the alt text, nothing else.`;
+
+    try {
+      const result = await geminiClient.generateContent(prompt, {
+        temperature: 0.5,
+        maxOutputTokens: 100,
+      });
+
+      let altText = sanitizeText(result.text.trim());
+
+      // Remove Shopify branding more aggressively
+      altText = altText.replace(/\bshopify\b/gi, 'store');
+
+      // Remove decorative prefixes
+      altText = altText.replace(/^(image of|picture of|photo of|screenshot of)\s+/gi, '');
+
+      // Truncate to 200 characters
+      if (altText.length > 200) {
+        altText = altText.substring(0, 197) + '...';
+      }
+
+      // Create fallback for good UX
+      const fallbackAltText = featureHighlighted
+        ? `${appName} - ${featureHighlighted}`
+        : `${appName} app ${imageType}`;
+
+      return {
+        success: true,
+        altText,
+        fallbackAltText,
+      };
+    } catch (error) {
+      const fallbackAltText = featureHighlighted
+        ? `${appName} - ${featureHighlighted}`
+        : `${appName} app ${imageType}`;
+
+      if (error instanceof GeminiError) {
+        return {
+          success: false,
+          error: error.message,
+          fallbackAltText,
+        };
+      }
+      return {
+        success: false,
+        error: 'Failed to generate alt text',
+        fallbackAltText,
+      };
+    }
+  }
+
   return {
     generateFromUrl,
     regenerateField,
+    regenerateAnalysis,
+    generateAltText,
   };
 }
