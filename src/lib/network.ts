@@ -47,17 +47,30 @@ function calculateDelay(attempt: number, config: Required<RetryConfig>): number 
 /**
  * Determine if error is retryable
  */
-function isRetryable(error: any, config: Required<RetryConfig>): boolean {
+function isRetryable(error: unknown, config: Required<RetryConfig>): boolean {
   if (error instanceof NetworkError) {
     return error.isRetryable;
   }
 
-  if (error.statusCode) {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'statusCode' in error &&
+    typeof error.statusCode === 'number'
+  ) {
     return config.retryableStatuses.includes(error.statusCode);
   }
 
   // Retry on network errors
-  if (error.name === 'TypeError' && error.message.includes('fetch')) {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'name' in error &&
+    error.name === 'TypeError' &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    error.message.includes('fetch')
+  ) {
     return true;
   }
 
@@ -107,8 +120,8 @@ export async function fetchWithRetry(
       }
 
       return response;
-    } catch (error: any) {
-      lastError = error;
+    } catch (error: unknown) {
+      lastError = error as Error;
 
       // Don't retry on last attempt
       if (attempt === config.maxRetries) {
@@ -121,9 +134,10 @@ export async function fetchWithRetry(
       }
 
       const delay = calculateDelay(attempt, config);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.warn(
         `Request failed, retrying in ${delay}ms (attempt ${attempt + 1}/${config.maxRetries}):`,
-        error.message
+        errorMessage
       );
       await sleep(delay);
     }
@@ -183,7 +197,7 @@ export function initNetworkMonitoring(): void {
   }
 
   window.addEventListener('online', () => {
-    console.log('✅ Network connection restored');
+    console.warn('Network connection restored');
   });
 
   window.addEventListener('offline', () => {

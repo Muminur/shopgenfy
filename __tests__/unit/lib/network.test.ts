@@ -35,7 +35,9 @@ describe('network utilities', () => {
         status: 200,
       });
 
-      (global.fetch as any).mockResolvedValueOnce(mockError).mockResolvedValueOnce(mockSuccess);
+      (global.fetch as unknown as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(mockError)
+        .mockResolvedValueOnce(mockSuccess);
 
       const response = await fetchWithRetry(
         'https://api.example.com/test',
@@ -55,7 +57,7 @@ describe('network utilities', () => {
 
       const mockError = new Response('', { status: 503 });
 
-      (global.fetch as any).mockResolvedValue(mockError);
+      (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockError);
 
       await expect(
         fetchWithRetry(
@@ -74,7 +76,7 @@ describe('network utilities', () => {
     it('should not retry on non-retryable status codes', async () => {
       const mockError = new Response('', { status: 400 });
 
-      (global.fetch as any).mockResolvedValueOnce(mockError);
+      (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockError);
 
       await expect(fetchWithRetry('https://api.example.com/test')).rejects.toThrow(NetworkError);
 
@@ -87,7 +89,7 @@ describe('network utilities', () => {
       const mockError = new Response('', { status: 503 });
       let callCount = 0;
 
-      (global.fetch as any).mockImplementation(async () => {
+      (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => {
         callCount++;
         return mockError;
       });

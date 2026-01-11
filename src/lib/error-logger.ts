@@ -7,7 +7,7 @@ export interface ErrorContext {
   url?: string;
   userAgent?: string;
   timestamp?: number;
-  [key: string]: any;
+  [key: string]: string | number | boolean | undefined;
 }
 
 export interface LoggedError {
@@ -64,9 +64,15 @@ export function logError(
 function sendToErrorTracking(loggedError: LoggedError): void {
   // Example: Sentry
   if (typeof window !== 'undefined' && 'Sentry' in window) {
-    const Sentry = (window as any).Sentry;
+    const Sentry = (
+      window as Window & {
+        Sentry?: {
+          captureException: (error: Error, options: { level: string; extra: ErrorContext }) => void;
+        };
+      }
+    ).Sentry;
 
-    Sentry.captureException(new Error(loggedError.message), {
+    Sentry?.captureException(new Error(loggedError.message), {
       level: loggedError.severity,
       extra: loggedError.context,
     });

@@ -414,7 +414,7 @@ test.describe('Performance Audit - Asset Optimization', () => {
   });
 
   test('should use appropriate cache headers', async ({ page }) => {
-    const responses: any[] = [];
+    const responses: Array<{ url: string; cacheControl: string | undefined }> = [];
 
     page.on('response', (response) => {
       if (response.url().includes('/_next/static/')) {
