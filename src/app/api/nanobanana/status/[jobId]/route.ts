@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createNanoBananaClient, NanoBananaError } from '@/lib/nanobanana';
+import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
 
 interface RouteParams {
   params: Promise<{ jobId: string }>;
 }
 
+const rateLimiter = createRateLimiter(rateLimitConfigs.nanobanana.status);
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  // Apply rate limiting
+  const rateLimitResponse = await rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const apiKey = process.env.NANO_BANANA_API_KEY;
 
   if (!apiKey) {
