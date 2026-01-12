@@ -28,7 +28,7 @@ describe('Settings Page', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({
-        selectedModel: 'gemini-1.5-pro',
+        selectedModel: 'gemini-2.0-flash',
         theme: 'system',
         autoSave: true,
       }),
@@ -62,7 +62,7 @@ describe('Settings Page', () => {
     it('should display available models', async () => {
       render(<SettingsPage />);
       await waitFor(() => {
-        expect(screen.getByText(/gemini 1\.5 pro/i)).toBeInTheDocument();
+        expect(screen.getByText(/gemini 2\.0 flash/i)).toBeInTheDocument();
       });
     });
   });

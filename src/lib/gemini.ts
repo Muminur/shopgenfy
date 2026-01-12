@@ -2,7 +2,7 @@ import { SHOPIFY_LIMITS } from './validators/constants';
 import { fetchWebpageContent, WebpageFetchError } from './webpage-fetcher';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const DEFAULT_MODEL = 'gemini-1.5-flash';
+const DEFAULT_MODEL = 'gemini-2.0-flash';
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000;
 

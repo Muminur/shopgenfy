@@ -19,8 +19,8 @@ export const API_CONFIG = {
 // Gemini API configuration
 export const GEMINI_CONFIG = {
   baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-  models: ['gemini-pro', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash-exp'],
-  defaultModel: 'gemini-pro',
+  models: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'],
+  defaultModel: 'gemini-2.0-flash',
   endpoints: {
     models: '/models',
     generateContent: '/models/{model}:generateContent',

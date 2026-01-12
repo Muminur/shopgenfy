@@ -241,7 +241,7 @@ export function createAPIVersionManager(
 
       try {
         await geminiClient.generateContent('Health check', {
-          model: 'gemini-pro',
+          model: 'gemini-2.0-flash',
           temperature: 0.1,
           maxOutputTokens: 10,
         });

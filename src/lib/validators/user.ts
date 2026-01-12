@@ -5,7 +5,7 @@ export const themeSchema = z.enum(['light', 'dark', 'system']);
 export const userSchema = z.object({
   id: z.string(),
   email: z.string().email('Invalid email format'),
-  selectedGeminiModel: z.string().default('gemini-pro'),
+  selectedGeminiModel: z.string().default('gemini-2.0-flash'),
   theme: themeSchema.default('light'),
   autoSave: z.boolean().default(true),
   createdAt: z.date(),
@@ -14,7 +14,7 @@ export const userSchema = z.object({
 
 export const createUserSchema = z.object({
   email: z.string().email('Invalid email format'),
-  selectedGeminiModel: z.string().default('gemini-pro'),
+  selectedGeminiModel: z.string().default('gemini-2.0-flash'),
   theme: themeSchema.default('light'),
   autoSave: z.boolean().default(true),
 });

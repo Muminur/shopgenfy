@@ -228,7 +228,7 @@ describe('Users Database Operations', () => {
 
       expect(result).toBeDefined();
       expect(result.email).toBe('newuser@example.com');
-      expect(result.selectedGeminiModel).toBe('gemini-pro'); // default
+      expect(result.selectedGeminiModel).toBe('gemini-2.0-flash'); // default
       expect(result.theme).toBe('light'); // default
       expect(result.autoSave).toBe(true); // default
     });
@@ -236,7 +236,7 @@ describe('Users Database Operations', () => {
     it('should create user with default settings', async () => {
       const result = await getOrCreateUser(db, 'defaults@example.com');
 
-      expect(result.selectedGeminiModel).toBe('gemini-pro');
+      expect(result.selectedGeminiModel).toBe('gemini-2.0-flash');
       expect(result.theme).toBe('light');
       expect(result.autoSave).toBe(true);
     });

@@ -20,28 +20,28 @@ interface Settings {
 }
 
 const defaultSettings: Settings = {
-  selectedModel: 'gemini-1.5-pro',
+  selectedModel: 'gemini-2.0-flash',
   theme: 'system',
   autoSave: true,
 };
 
 const availableModels = [
   {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
-    description: 'Most capable model with best quality outputs',
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    description: 'Fast and efficient for quick responses',
     recommended: true,
   },
   {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
-    description: 'Fast and efficient for quick responses',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    description: 'Latest flash model with improved capabilities',
     recommended: false,
   },
   {
-    id: 'gemini-pro',
-    name: 'Gemini Pro',
-    description: 'Balanced performance and capability',
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    description: 'Most capable model with best quality outputs',
     recommended: false,
   },
 ];
