@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { AlertMessage } from '@/components/feedback/AlertMessage';
 import { LoadingSpinner } from '@/components/feedback/LoadingSpinner';
+import { APIStatusCard } from '@/components/settings/APIStatusCard';
+import { VersionInfoCard } from '@/components/settings/VersionInfoCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -253,6 +255,12 @@ export default function SettingsPage() {
               </p>
             </CardContent>
           </Card>
+
+          {/* API Status and Version Info Cards */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <APIStatusCard />
+            <VersionInfoCard />
+          </div>
 
           {/* Save Button */}
           <div className="flex justify-end">
