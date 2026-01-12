@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CharacterCountInput } from '@/components/forms/CharacterCountInput';
 import { CharacterCountTextarea } from '@/components/forms/CharacterCountTextarea';
@@ -16,9 +17,20 @@ import { AlertMessage } from '@/components/feedback/AlertMessage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Sparkles, Download, Save, Globe, ImageIcon, Loader2, Languages, Tag } from 'lucide-react';
+import {
+  Sparkles,
+  Download,
+  Save,
+  Globe,
+  ImageIcon,
+  Loader2,
+  Languages,
+  Tag,
+  Eye,
+} from 'lucide-react';
 import { SUPPORTED_LANGUAGES, SHOPIFY_INTEGRATIONS } from '@/lib/validators/constants';
 import { PricingConfig } from '@/types';
+import { usePreviewSync, PreviewFormData } from '@/hooks/usePreviewSync';
 
 interface FormData {
   landingPageUrl: string;
@@ -72,6 +84,9 @@ export default function DashboardPage() {
   >([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Preview sync hook for real-time preview synchronization
+  const { saveToPreview, lastSynced } = usePreviewSync({ debounceMs: 500 });
 
   // Calculate completion progress
   const calculateProgress = useCallback(() => {
@@ -279,6 +294,29 @@ export default function DashboardPage() {
       }
     };
   }, [formData]);
+
+  // Sync form data to localStorage for preview
+  useEffect(() => {
+    // Only sync if user has interacted and has some data
+    if (!hasUserInteractedRef.current) return;
+    if (!formData.appName && !formData.appIntroduction && !formData.appDescription) return;
+
+    // Create preview data matching the PreviewFormData interface
+    const previewData: PreviewFormData = {
+      landingPageUrl: formData.landingPageUrl,
+      appName: formData.appName,
+      appIntroduction: formData.appIntroduction,
+      appDescription: formData.appDescription,
+      features: formData.features,
+      languages: formData.languages,
+      worksWith: formData.worksWith,
+      primaryCategory: formData.primaryCategory,
+      secondaryCategory: formData.secondaryCategory,
+      pricing: formData.pricing,
+    };
+
+    saveToPreview(previewData);
+  }, [formData, saveToPreview]);
 
   const progress = calculateProgress();
 
@@ -585,6 +623,21 @@ export default function DashboardPage() {
                     </>
                   )}
                 </Button>
+
+                <Separator />
+
+                <Button asChild variant="outline" className="w-full">
+                  <Link href="/preview">
+                    <Eye className="h-4 w-4 mr-2" />
+                    Live Preview
+                  </Link>
+                </Button>
+
+                {lastSynced && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Preview synced: {lastSynced.toLocaleTimeString()}
+                  </p>
+                )}
 
                 <Separator />
 
