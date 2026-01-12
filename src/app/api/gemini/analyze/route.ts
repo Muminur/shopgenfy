@@ -13,8 +13,15 @@ export async function POST(request: NextRequest) {
 
   const apiKey = process.env.GEMINI_API_KEY;
 
-  if (!apiKey) {
-    return NextResponse.json({ error: 'Gemini API key not configured' }, { status: 500 });
+  if (!apiKey || apiKey.trim() === '') {
+    console.error('[/api/gemini/analyze] GEMINI_API_KEY is missing or empty in .env.local');
+    return NextResponse.json(
+      {
+        error: 'Gemini API key not configured. Please add your GEMINI_API_KEY to .env.local file.',
+        help: 'Get your API key from https://aistudio.google.com/app/apikey',
+      },
+      { status: 503 }
+    );
   }
 
   let body: { url?: string };
@@ -47,10 +54,21 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(analysis);
   } catch (error) {
+    console.error('[/api/gemini/analyze] Error analyzing URL:', body.url);
+    console.error('[/api/gemini/analyze] Error details:', error);
+
     if (error instanceof GeminiError) {
+      console.error(
+        '[/api/gemini/analyze] GeminiError:',
+        error.message,
+        'Status:',
+        error.statusCode
+      );
       return NextResponse.json({ error: error.message }, { status: error.statusCode || 500 });
     }
 
-    return NextResponse.json({ error: 'Failed to analyze URL' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[/api/gemini/analyze] Non-GeminiError:', errorMessage);
+    return NextResponse.json({ error: `Failed to analyze URL: ${errorMessage}` }, { status: 500 });
   }
 }

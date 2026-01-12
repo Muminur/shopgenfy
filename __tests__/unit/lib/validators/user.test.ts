@@ -16,7 +16,7 @@ describe('User Validation Schema', () => {
       });
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.selectedGeminiModel).toBe('gemini-pro');
+        expect(result.data.selectedGeminiModel).toBe('gemini-2.0-flash');
         expect(result.data.theme).toBe('light');
       }
     });
