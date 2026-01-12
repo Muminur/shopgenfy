@@ -1,4 +1,5 @@
 import { SHOPIFY_LIMITS } from './validators/constants';
+import { fetchWebpageContent, WebpageFetchError } from './webpage-fetcher';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-pro';
@@ -296,15 +297,36 @@ export function createGeminiClient(apiKey: string): GeminiClient {
       throw new GeminiError('Invalid URL format');
     }
 
-    const prompt = `Analyze the following landing page URL and extract information for a Shopify App Store listing.
+    // Fetch the webpage content first
+    let pageContent: string;
+    try {
+      pageContent = await fetchWebpageContent(url, { maxLength: 12000 });
+    } catch (error) {
+      if (error instanceof WebpageFetchError) {
+        throw new GeminiError(`Failed to fetch page: ${error.message}`, error.statusCode);
+      }
+      throw new GeminiError('Failed to fetch page content');
+    }
+
+    if (!pageContent || pageContent.trim().length < 50) {
+      throw new GeminiError('Page has insufficient content to analyze');
+    }
+
+    const prompt = `Analyze the following webpage content and extract information for a Shopify App Store listing.
+
 URL: ${url}
 
-Extract and return a JSON object with these fields:
+PAGE CONTENT:
+${pageContent}
+
+---
+
+Based on the above content, extract and return a JSON object with these fields:
 - appName: The app name (max 30 characters, should start with brand term)
 - appIntroduction: A tagline (max 100 characters)
 - appDescription: Description (max 500 characters, no contact info, no superlative claims)
 - featureList: Array of key features (each max 80 characters)
-- languages: Array of language codes the app supports
+- languages: Array of language codes the app supports (default to ["en"] if unclear)
 - primaryCategory: Main category (e.g., "Store design", "Marketing", "Sales")
 - featureTags: Array of relevant tags (max 25)
 - pricing: Object with type ("free", "freemium", "paid", "subscription") and optional price/currency/billingCycle
