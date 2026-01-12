@@ -21,6 +21,8 @@ export default defineConfig({
         'src/app/layout.tsx',
         'src/app/page.tsx',
         'src/types/**',
+        'src/lib/env.ts',
+        'src/lib/performance.ts',
       ],
       thresholds: {
         statements: 60,
