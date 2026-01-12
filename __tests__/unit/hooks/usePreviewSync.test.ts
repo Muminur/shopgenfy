@@ -55,6 +55,7 @@ describe('usePreviewSync Hook', () => {
     Object.defineProperty(window, 'localStorage', {
       value: mockLocalStorage,
       writable: true,
+      configurable: true,
     });
     mockLocalStorage.clear();
     vi.clearAllMocks();
@@ -465,19 +466,36 @@ describe('usePreviewSync Hook', () => {
   });
 
   describe('SSR safety', () => {
-    it('should not throw when localStorage is undefined', () => {
-      const originalLocalStorage = window.localStorage;
-      // @ts-expect-error - Simulating SSR environment
-      delete window.localStorage;
+    it('should not throw when localStorage throws', () => {
+      // Mock localStorage to throw (simulating SSR or storage disabled)
+      const throwingStorage = {
+        getItem: vi.fn(() => {
+          throw new Error('localStorage is not available');
+        }),
+        setItem: vi.fn(() => {
+          throw new Error('localStorage is not available');
+        }),
+        removeItem: vi.fn(() => {
+          throw new Error('localStorage is not available');
+        }),
+        clear: vi.fn(),
+      };
+
+      Object.defineProperty(window, 'localStorage', {
+        value: throwingStorage,
+        writable: true,
+        configurable: true,
+      });
 
       expect(() => {
         renderHook(() => usePreviewSync());
       }).not.toThrow();
 
-      // Restore localStorage
+      // Restore mock localStorage
       Object.defineProperty(window, 'localStorage', {
-        value: originalLocalStorage,
+        value: mockLocalStorage,
         writable: true,
+        configurable: true,
       });
     });
   });
