@@ -23,6 +23,9 @@ export default defineConfig({
         'src/types/**',
         'src/lib/env.ts',
         'src/lib/performance.ts',
+        'src/lib/mongodb.ts',
+        'src/lib/error-logger.ts',
+        'src/lib/network.ts',
       ],
       thresholds: {
         statements: 60,
