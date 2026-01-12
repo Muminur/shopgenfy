@@ -8,6 +8,22 @@ import {
   type GeminiAnalysisResult,
 } from '@/lib/gemini';
 
+// Mock the webpage-fetcher module
+vi.mock('@/lib/webpage-fetcher', () => ({
+  fetchWebpageContent: vi.fn(),
+  WebpageFetchError: class WebpageFetchError extends Error {
+    constructor(
+      message: string,
+      public statusCode?: number
+    ) {
+      super(message);
+      this.name = 'WebpageFetchError';
+    }
+  },
+}));
+
+import { fetchWebpageContent } from '@/lib/webpage-fetcher';
+
 describe('GeminiClient', () => {
   const mockApiKey = 'test-api-key';
   let client: GeminiClient;
@@ -265,6 +281,12 @@ describe('GeminiClient', () => {
   });
 
   describe('analyzeUrl', () => {
+    const mockPageContent = `
+      MyApp Store Helper - Streamline your store operations
+      A powerful tool that helps merchants manage their online stores efficiently.
+      Features: Inventory tracking, Order management, Analytics
+    `;
+
     it('should analyze a landing page URL and extract app info', async () => {
       const mockAnalysis: GeminiAnalysisResult = {
         appName: 'MyApp Store Helper',
@@ -279,6 +301,10 @@ describe('GeminiClient', () => {
         confidence: 0.85,
       };
 
+      // Mock webpage fetch
+      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
+      // Mock Gemini API response
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -290,9 +316,6 @@ describe('GeminiClient', () => {
                   role: 'model',
                 },
                 finishReason: 'STOP',
-                groundingMetadata: {
-                  webSearchQueries: ['landing page analysis'],
-                },
               },
             ],
           }),
@@ -300,6 +323,9 @@ describe('GeminiClient', () => {
 
       const result = await client.analyzeUrl('https://example.com/app');
 
+      expect(fetchWebpageContent).toHaveBeenCalledWith('https://example.com/app', {
+        maxLength: 12000,
+      });
       expect(result.appName).toBe('MyApp Store Helper');
       expect(result.featureList).toHaveLength(3);
       expect(result.confidence).toBeGreaterThan(0);
@@ -311,10 +337,25 @@ describe('GeminiClient', () => {
     });
 
     it('should handle unreachable URLs', async () => {
-      global.fetch = vi.fn().mockRejectedValueOnce(new Error('ENOTFOUND'));
+      const { WebpageFetchError } = await import('@/lib/webpage-fetcher');
+      vi.mocked(fetchWebpageContent).mockRejectedValue(
+        new WebpageFetchError('Failed to fetch: ENOTFOUND', 0)
+      );
 
       await expect(client.analyzeUrl('https://unreachable-domain-xyz.com')).rejects.toThrow(
         GeminiError
+      );
+      await expect(client.analyzeUrl('https://unreachable-domain-xyz.com')).rejects.toThrow(
+        'Failed to fetch page'
+      );
+    });
+
+    it('should handle pages with insufficient content', async () => {
+      vi.mocked(fetchWebpageContent).mockResolvedValue('Short');
+
+      await expect(client.analyzeUrl('https://example.com')).rejects.toThrow(GeminiError);
+      await expect(client.analyzeUrl('https://example.com')).rejects.toThrow(
+        'insufficient content'
       );
     });
 
@@ -332,6 +373,10 @@ describe('GeminiClient', () => {
         confidence: 0.9,
       };
 
+      // Mock webpage fetch
+      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
+      // Mock Gemini API response
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
         json: () =>

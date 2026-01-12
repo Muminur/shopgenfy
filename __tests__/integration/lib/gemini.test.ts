@@ -1,6 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createGeminiClient, GeminiError, type GeminiClient } from '@/lib/gemini';
 
+// Mock the webpage-fetcher module
+vi.mock('@/lib/webpage-fetcher', () => ({
+  fetchWebpageContent: vi.fn(),
+  WebpageFetchError: class WebpageFetchError extends Error {
+    constructor(
+      message: string,
+      public statusCode?: number
+    ) {
+      super(message);
+      this.name = 'WebpageFetchError';
+    }
+  },
+}));
+
+import { fetchWebpageContent } from '@/lib/webpage-fetcher';
+
 /**
  * Integration tests for Gemini API client
  * Tests actual client functions with mocked HTTP responses
@@ -362,7 +378,15 @@ describe('Gemini API Client - Integration Tests', () => {
   });
 
   describe('analyzeUrl - API Integration', () => {
+    const mockPageContent = `
+      Test App - A great app for Shopify merchants
+      This app helps you manage your store efficiently.
+      Features: Feature 1, Feature 2, Feature 3
+    `;
+
     it('should analyze URL and return structured data with truncation', async () => {
+      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
       const mockResponse = {
         candidates: [
           {
@@ -400,6 +424,7 @@ describe('Gemini API Client - Integration Tests', () => {
 
       const result = await client.analyzeUrl('https://example.com');
 
+      expect(fetchWebpageContent).toHaveBeenCalledWith('https://example.com', { maxLength: 12000 });
       expect(result.appName.length).toBeLessThanOrEqual(30);
       expect(result.appIntroduction).toBe('A great app for Shopify merchants');
       expect(result.featureList).toHaveLength(3);
@@ -412,6 +437,8 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should handle malformed JSON response from API', async () => {
+      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
       const mockResponse = {
         candidates: [
           {
@@ -434,6 +461,8 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should handle partial data with defaults', async () => {
+      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
       const mockResponse = {
         candidates: [
           {
@@ -467,6 +496,8 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should truncate feature list items exceeding character limit', async () => {
+      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
       const longFeature = 'A'.repeat(100);
       const mockResponse = {
         candidates: [
@@ -500,6 +531,8 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should limit feature tags to maximum allowed', async () => {
+      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
       const manyTags = Array.from({ length: 30 }, (_, i) => `tag${i}`);
       const mockResponse = {
         candidates: [
@@ -538,6 +571,8 @@ describe('Gemini API Client - Integration Tests', () => {
       ];
 
       for (const { input, expected } of testCases) {
+        vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
         const mockResponse = {
           candidates: [
             {
@@ -567,6 +602,8 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should use lower temperature for analysis calls', async () => {
+      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+
       const mockResponse = {
         candidates: [
           {
