@@ -20,6 +20,7 @@ export default defineConfig({
         'src/components/ui/**',
         'src/app/layout.tsx',
         'src/app/page.tsx',
+        'src/types/**',
       ],
       thresholds: {
         statements: 60,
