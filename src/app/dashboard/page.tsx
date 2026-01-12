@@ -1,6 +1,28 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+
+// Helper to get or create a persistent user ID for demo purposes
+// In production, this would come from a proper auth system (NextAuth, Auth0, etc.)
+function getOrCreateUserId(): string {
+  if (typeof window === 'undefined') return 'demo-user';
+
+  try {
+    const storageKey = 'shopgenfy_user_id';
+    let userId = localStorage.getItem(storageKey);
+
+    if (!userId) {
+      // Use crypto.randomUUID() for cryptographically secure IDs
+      userId = `user-${crypto.randomUUID()}`;
+      localStorage.setItem(storageKey, userId);
+    }
+
+    return userId;
+  } catch {
+    // localStorage might not be available in test environments
+    return 'demo-user';
+  }
+}
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CharacterCountInput } from '@/components/forms/CharacterCountInput';
@@ -126,12 +148,15 @@ export default function DashboardPage() {
       const data = await response.json();
 
       // Auto-fill form with analyzed data
+      // Note: API returns featureList, we map it to features for form compatibility
       setFormData((prev) => ({
         ...prev,
         appName: data.appName || prev.appName,
         appIntroduction: data.appIntroduction || prev.appIntroduction,
         appDescription: data.appDescription || prev.appDescription,
-        features: data.features?.length > 0 ? data.features : prev.features,
+        features: data.featureList?.length > 0 ? data.featureList : prev.features,
+        languages: data.languages?.length > 0 ? data.languages : prev.languages,
+        primaryCategory: data.primaryCategory || prev.primaryCategory,
       }));
 
       setSuccess('Landing page analyzed successfully!');
@@ -147,37 +172,89 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/nanobanana/generate', {
+      const generatedImages: typeof images = [];
+      const features = formData.features.filter((f) => f.trim());
+
+      // Generate app icon first
+      const iconResponse = await fetch('/api/nanobanana/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `App icon and feature images for: ${formData.appName}`,
-          features: formData.features.filter((f) => f.trim()),
+          type: 'icon',
+          prompt: `Professional app icon for ${formData.appName}: ${formData.appIntroduction || 'A modern application'}`,
+          style: 'modern',
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to generate images');
+      if (iconResponse.ok) {
+        const iconData = await iconResponse.json();
+        if (iconData.image) {
+          generatedImages.push({
+            id: iconData.image.id || `icon-${Date.now()}`,
+            url: iconData.image.url,
+            type: 'icon',
+            width: iconData.image.width || 1200,
+            height: iconData.image.height || 1200,
+            alt: iconData.image.altText || `${formData.appName} app icon`,
+          });
+        }
       }
 
-      const data = await response.json();
-      setImages(data.images || []);
-      setSuccess('Images generated successfully!');
-    } catch {
-      setError('Failed to generate images. Please try again.');
+      // Generate feature images for each feature (max 3 to avoid rate limits)
+      const featuresToGenerate = features.slice(0, 3);
+      for (const feature of featuresToGenerate) {
+        const featureResponse = await fetch('/api/nanobanana/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'feature',
+            prompt: `Feature showcase for ${formData.appName}: ${feature}`,
+            featureHighlight: feature,
+            style: 'modern',
+          }),
+        });
+
+        if (featureResponse.ok) {
+          const featureData = await featureResponse.json();
+          if (featureData.image) {
+            generatedImages.push({
+              id: featureData.image.id || `feature-${Date.now()}-${feature.slice(0, 10)}`,
+              url: featureData.image.url,
+              type: 'feature',
+              width: featureData.image.width || 1600,
+              height: featureData.image.height || 900,
+              alt: featureData.image.altText || `${formData.appName} - ${feature}`,
+            });
+          }
+        }
+      }
+
+      if (generatedImages.length > 0) {
+        setImages(generatedImages);
+        setSuccess(`Generated ${generatedImages.length} image(s) successfully!`);
+      } else {
+        throw new Error('No images were generated');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to generate images';
+      setError(`${message}. Please check your NANO_BANANA_API_KEY in .env.local`);
     } finally {
       setIsGeneratingImages(false);
     }
-  }, [formData.appName, formData.features]);
+  }, [formData.appName, formData.appIntroduction, formData.features]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     setError(null);
 
     try {
+      const userId = getOrCreateUserId();
       const response = await fetch('/api/submissions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId,
+        },
         body: JSON.stringify({
           ...formData,
           status: 'draft',
@@ -185,12 +262,14 @@ export default function DashboardPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save submission');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save submission');
       }
 
       setSuccess('Submission saved successfully!');
-    } catch {
-      setError('Failed to save submission. Please try again.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save submission';
+      setError(`${message}. Please try again.`);
     } finally {
       setIsSaving(false);
     }
@@ -273,9 +352,13 @@ export default function DashboardPage() {
     autoSaveTimerRef.current = setTimeout(async () => {
       if (formData.appName || formData.appIntroduction) {
         try {
+          const userId = getOrCreateUserId();
           await fetch('/api/submissions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-id': userId,
+            },
             body: JSON.stringify({
               ...formData,
               status: 'draft',

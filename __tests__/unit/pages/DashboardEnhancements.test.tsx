@@ -6,9 +6,19 @@ import DashboardPage from '@/app/dashboard/page';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 global.fetch = vi.fn() as any;
 
+// Mock localStorage for user ID persistence
+const localStorageMock = {
+  getItem: vi.fn(() => 'test-user-id'),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
 describe('Dashboard Page - Milestone 6 Enhancements', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorageMock.getItem.mockReturnValue('test-user-id');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (global.fetch as any).mockResolvedValue({
       ok: true,

@@ -6,12 +6,13 @@ import { test, expect } from '@playwright/test';
  */
 
 // Mock API response for successful analysis
+// Note: The actual Gemini API returns 'featureList' not 'features'
 const mockAnalysisResponse = {
   appName: 'AISpree Assistant',
   appIntroduction: 'Your AI-powered productivity companion',
   appDescription:
     'AISpree Assistant helps you streamline your workflow with intelligent automation and smart suggestions.',
-  features: [
+  featureList: [
     'Smart task management',
     'AI-powered suggestions',
     'Workflow automation',
@@ -200,7 +201,7 @@ test.describe('Dashboard - Full Workflow Integration', () => {
           appName: 'WorkflowTest App',
           appIntroduction: 'Test tagline for workflow',
           appDescription: 'Complete workflow test description',
-          features: ['Feature 1', 'Feature 2', 'Feature 3'],
+          featureList: ['Feature 1', 'Feature 2', 'Feature 3'],
           languages: ['en'],
           primaryCategory: 'Store design',
           featureTags: ['test', 'workflow'],
