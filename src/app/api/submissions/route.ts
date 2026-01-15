@@ -8,6 +8,53 @@ function getUserId(request: NextRequest): string | null {
   return request.headers.get('x-user-id');
 }
 
+/**
+ * Transform dashboard field names to API schema field names
+ * Dashboard uses 'features' but API expects 'featureList'
+ * Also ensures featureTags exists as empty array if not provided
+ * Handles draft mode by making optional fields truly optional
+ */
+function transformDashboardToApi(body: unknown): unknown {
+  // Validate it's an object first
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return body; // Let Zod handle the error
+  }
+
+  const data = body as Record<string, unknown>;
+  const transformed: Record<string, unknown> = { ...data };
+
+  // Map 'features' to 'featureList'
+  if ('features' in data && !('featureList' in data)) {
+    transformed.featureList = data.features;
+    delete transformed.features;
+  }
+
+  // Ensure featureTags exists (defaults to empty array)
+  if (!('featureTags' in transformed)) {
+    transformed.featureTags = [];
+  }
+
+  // Helper to check if value should be removed (empty string, null, undefined, or whitespace-only)
+  const isEmptyValue = (value: unknown): boolean => {
+    return (
+      value === '' ||
+      value === null ||
+      value === undefined ||
+      (typeof value === 'string' && value.trim() === '')
+    );
+  };
+
+  // Handle optional fields - remove if empty to allow draft mode
+  const optionalFields = ['secondaryCategory', 'primaryCategory', 'landingPageUrl'];
+  optionalFields.forEach((field) => {
+    if (field in transformed && isEmptyValue(transformed[field])) {
+      delete transformed[field];
+    }
+  });
+
+  return transformed;
+}
+
 export async function GET(request: NextRequest) {
   const userId = getUserId(request);
 
@@ -49,8 +96,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  // Transform dashboard field names to API field names
+  const transformedBody = transformDashboardToApi(body);
+
   // Validate the input
-  const parseResult = createSubmissionSchema.safeParse(body);
+  const parseResult = createSubmissionSchema.safeParse(transformedBody);
   if (!parseResult.success) {
     const errors = parseResult.error.issues.map((i) => i.message).join(', ');
     return NextResponse.json({ error: `Validation failed: ${errors}` }, { status: 400 });

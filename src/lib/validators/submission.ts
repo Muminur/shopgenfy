@@ -88,13 +88,19 @@ export const submissionSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const createSubmissionSchema = submissionSchema.omit({
-  id: true,
-  userId: true,
-  status: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const createSubmissionSchema = submissionSchema
+  .omit({
+    id: true,
+    userId: true,
+    status: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    // Make these fields optional for draft mode (they'll be deleted when empty)
+    primaryCategory: z.enum(SHOPIFY_CATEGORIES as unknown as [string, ...string[]]).optional(),
+    landingPageUrl: z.string().url('Invalid URL format').optional(),
+  });
 
 export const updateSubmissionSchema = createSubmissionSchema.partial();
 

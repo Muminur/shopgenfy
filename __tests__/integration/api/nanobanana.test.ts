@@ -113,8 +113,9 @@ describe('Nano Banana API Routes', () => {
       expect(data.error).toContain('type');
     });
 
-    it('should return 500 when API key is not configured', async () => {
+    it('should return 500 when API key is not configured and mock mode explicitly disabled', async () => {
       delete process.env.NANO_BANANA_API_KEY;
+      process.env.NANO_BANANA_MOCK_MODE = 'false'; // Explicitly disable mock mode
 
       vi.resetModules();
       const { POST } = await import('@/app/api/nanobanana/generate/route');
