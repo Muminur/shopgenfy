@@ -15,7 +15,7 @@ export interface SubmissionDocument {
   featureList: string[];
   languages: string[];
   worksWith: string[];
-  primaryCategory: string;
+  primaryCategory?: string; // Optional for draft mode
   secondaryCategory?: string;
   featureTags: string[];
   pricing: {
@@ -25,7 +25,7 @@ export interface SubmissionDocument {
     billingCycle?: 'monthly' | 'yearly' | 'one-time';
     trialDays?: number;
   };
-  landingPageUrl: string;
+  landingPageUrl?: string; // Optional for draft mode
   status: 'draft' | 'complete' | 'exported';
   createdAt: Date;
   updatedAt: Date;
@@ -48,11 +48,11 @@ function toSubmission(doc: WithId<Document>): SubmissionDocument {
     featureList: doc.featureList as string[],
     languages: doc.languages as string[],
     worksWith: doc.worksWith as string[],
-    primaryCategory: doc.primaryCategory as string,
+    primaryCategory: doc.primaryCategory as string | undefined,
     secondaryCategory: doc.secondaryCategory as string | undefined,
     featureTags: doc.featureTags as string[],
     pricing: doc.pricing as SubmissionDocument['pricing'],
-    landingPageUrl: doc.landingPageUrl as string,
+    landingPageUrl: doc.landingPageUrl as string | undefined,
     status: doc.status as SubmissionDocument['status'],
     createdAt: doc.createdAt as Date,
     updatedAt: doc.updatedAt as Date,
