@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
+import { getDatabaseConnected } from '@/lib/mongodb';
 import { getAPIVersionByService } from '@/lib/db/api-versions';
 
 interface VersionData {
@@ -9,29 +9,31 @@ interface VersionData {
 
 interface VersionInfoResponse {
   gemini: VersionData;
-  nanobanana: VersionData;
+  pollinations: VersionData;
 }
+
+// Pollinations.ai version - this is a free API, version is tracked from their changelog
+const POLLINATIONS_VERSION = '1.0.0';
 
 export async function GET() {
   try {
-    const db = await getDatabase();
+    const db = await getDatabaseConnected();
 
-    // Fetch version data for both services in parallel
-    const [geminiVersion, nanoBananaVersion] = await Promise.all([
-      getAPIVersionByService(db, 'gemini'),
-      getAPIVersionByService(db, 'nanobanana'),
-    ]);
+    // Fetch version data for Gemini from database
+    const geminiVersion = await getAPIVersionByService(db, 'gemini');
 
     const now = new Date().toISOString();
 
+    // Pollinations.ai is a free API with no versioning endpoint
+    // We provide a static version indicator
     const response: VersionInfoResponse = {
       gemini: {
         version: geminiVersion?.currentVersion ?? null,
         lastChecked: geminiVersion?.lastChecked?.toISOString() ?? now,
       },
-      nanobanana: {
-        version: nanoBananaVersion?.currentVersion ?? null,
-        lastChecked: nanoBananaVersion?.lastChecked?.toISOString() ?? now,
+      pollinations: {
+        version: POLLINATIONS_VERSION,
+        lastChecked: now,
       },
     };
 
@@ -44,7 +46,7 @@ export async function GET() {
     return NextResponse.json(
       {
         gemini: { version: null, lastChecked: now },
-        nanobanana: { version: null, lastChecked: now },
+        pollinations: { version: POLLINATIONS_VERSION, lastChecked: now },
       },
       { status: 500 }
     );

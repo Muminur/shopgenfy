@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 // Mock MongoDB connection
 vi.mock('@/lib/mongodb', () => ({
   getDatabase: vi.fn(),
+  getDatabaseConnected: vi.fn(),
 }));
 
 // Mock user database operations
@@ -38,8 +39,8 @@ describe('Settings API Routes', () => {
       const { getUserById } = await import('@/lib/db/users');
       (getUserById as ReturnType<typeof vi.fn>).mockResolvedValue(mockUserSettings);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { GET } = await import('@/app/api/settings/route');
       const request = new NextRequest('http://localhost/api/settings', {
@@ -67,8 +68,8 @@ describe('Settings API Routes', () => {
       const { getUserById } = await import('@/lib/db/users');
       (getUserById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { GET } = await import('@/app/api/settings/route');
       const request = new NextRequest('http://localhost/api/settings', {
@@ -93,8 +94,8 @@ describe('Settings API Routes', () => {
       (getUserById as ReturnType<typeof vi.fn>).mockResolvedValue(mockUserSettings);
       (updateUser as ReturnType<typeof vi.fn>).mockResolvedValue(updatedSettings);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { PUT } = await import('@/app/api/settings/route');
       const request = new NextRequest('http://localhost/api/settings', {
@@ -134,8 +135,8 @@ describe('Settings API Routes', () => {
       const { getUserById } = await import('@/lib/db/users');
       (getUserById as ReturnType<typeof vi.fn>).mockResolvedValue(mockUserSettings);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { PUT } = await import('@/app/api/settings/route');
       const request = new NextRequest('http://localhost/api/settings', {
@@ -156,8 +157,8 @@ describe('Settings API Routes', () => {
       const { getUserById } = await import('@/lib/db/users');
       (getUserById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { PUT } = await import('@/app/api/settings/route');
       const request = new NextRequest('http://localhost/api/settings', {

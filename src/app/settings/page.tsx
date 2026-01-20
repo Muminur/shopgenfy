@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTheme } from 'next-themes';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { AlertMessage } from '@/components/feedback/AlertMessage';
 import { LoadingSpinner } from '@/components/feedback/LoadingSpinner';
@@ -59,6 +60,15 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Use next-themes for theme management
+  const { setTheme, theme: currentTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Ensure component is mounted before accessing theme
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Load settings on mount
   useEffect(() => {
     const loadSettings = async () => {
@@ -66,11 +76,15 @@ export default function SettingsPage() {
         const response = await fetch('/api/settings');
         if (response.ok) {
           const data = await response.json();
+          const loadedTheme = data.theme || defaultSettings.theme;
           setSettings({
-            selectedModel: data.selectedModel || defaultSettings.selectedModel,
-            theme: data.theme || defaultSettings.theme,
+            // API uses selectedGeminiModel, but frontend uses selectedModel
+            selectedModel: data.selectedGeminiModel || defaultSettings.selectedModel,
+            theme: loadedTheme,
             autoSave: data.autoSave ?? defaultSettings.autoSave,
           });
+          // Sync the loaded theme preference with next-themes
+          setTheme(loadedTheme);
         }
       } catch {
         setError('Failed to load settings');
@@ -80,7 +94,26 @@ export default function SettingsPage() {
     };
 
     loadSettings();
-  }, []);
+  }, [setTheme]);
+
+  // Sync settings theme state with current theme from next-themes on mount
+  // We only sync when mounted or currentTheme changes, not when settings.theme changes
+  // to avoid potential infinite loops
+  useEffect(() => {
+    if (mounted && currentTheme) {
+      const validThemes = ['light', 'dark', 'system'] as const;
+      const isValidTheme = validThemes.includes(currentTheme as (typeof validThemes)[number]);
+      if (isValidTheme) {
+        setSettings((prev) => {
+          // Only update if different to avoid unnecessary re-renders
+          if (prev.theme !== currentTheme) {
+            return { ...prev, theme: currentTheme as Settings['theme'] };
+          }
+          return prev;
+        });
+      }
+    }
+  }, [currentTheme, mounted]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -88,10 +121,17 @@ export default function SettingsPage() {
     setSuccess(null);
 
     try {
+      // Map frontend field names to API field names
+      const apiPayload = {
+        selectedGeminiModel: settings.selectedModel,
+        theme: settings.theme,
+        autoSave: settings.autoSave,
+      };
+
       const response = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(apiPayload),
       });
 
       if (!response.ok) {
@@ -110,9 +150,14 @@ export default function SettingsPage() {
     setSettings((prev) => ({ ...prev, selectedModel: modelId }));
   }, []);
 
-  const handleThemeSelect = useCallback((theme: 'light' | 'dark' | 'system') => {
-    setSettings((prev) => ({ ...prev, theme }));
-  }, []);
+  const handleThemeSelect = useCallback(
+    (theme: 'light' | 'dark' | 'system') => {
+      setSettings((prev) => ({ ...prev, theme }));
+      // Apply theme immediately using next-themes
+      setTheme(theme);
+    },
+    [setTheme]
+  );
 
   const handleAutoSaveToggle = useCallback((checked: boolean) => {
     setSettings((prev) => ({ ...prev, autoSave: checked }));
