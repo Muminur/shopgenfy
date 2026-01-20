@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
+import { getDatabaseConnected } from '@/lib/mongodb';
 import { getUserById, updateUser } from '@/lib/db/users';
 
 const VALID_THEMES = ['light', 'dark', 'system'] as const;
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const db = await getDatabase();
+    const db = await getDatabaseConnected();
     const user = await getUserById(db, userId);
 
     if (!user) {
@@ -63,7 +63,7 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const db = await getDatabase();
+    const db = await getDatabaseConnected();
 
     // Check if user exists
     const existingUser = await getUserById(db, userId);

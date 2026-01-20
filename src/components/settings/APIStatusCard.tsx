@@ -14,7 +14,7 @@ export interface APIStatus {
 
 export interface APIStatusResponse {
   gemini: APIStatus;
-  nanobanana: APIStatus;
+  pollinations: APIStatus;
 }
 
 interface StatusIndicatorProps {
@@ -106,9 +106,9 @@ export function APIStatusCard() {
               ariaLabel="Gemini API connection status"
             />
             <StatusIndicator
-              name="Nano Banana API"
-              status={status?.nanobanana ?? null}
-              ariaLabel="Nano Banana API connection status"
+              name="Pollinations AI"
+              status={status?.pollinations ?? null}
+              ariaLabel="Pollinations AI connection status"
             />
           </div>
         )}

@@ -13,7 +13,7 @@ export interface VersionData {
 
 export interface VersionInfoResponse {
   gemini: VersionData;
-  nanobanana: VersionData;
+  pollinations: VersionData;
 }
 
 interface VersionItemProps {
@@ -79,7 +79,7 @@ export function VersionInfoCard() {
     fetchVersionInfo();
   }, [fetchVersionInfo]);
 
-  const lastChecked = versionInfo?.gemini?.lastChecked || versionInfo?.nanobanana?.lastChecked;
+  const lastChecked = versionInfo?.gemini?.lastChecked || versionInfo?.pollinations?.lastChecked;
 
   return (
     <Card>
@@ -103,9 +103,9 @@ export function VersionInfoCard() {
                 ariaLabel="Gemini API version information"
               />
               <VersionItem
-                name="Nano Banana API"
-                version={versionInfo?.nanobanana?.version ?? null}
-                ariaLabel="Nano Banana API version information"
+                name="Pollinations AI"
+                version={versionInfo?.pollinations?.version ?? null}
+                ariaLabel="Pollinations AI version information"
               />
             </div>
 

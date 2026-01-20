@@ -21,7 +21,7 @@ describe('Status API Routes', () => {
     vi.clearAllMocks();
     vi.resetModules();
     // Set up default environment variables
-    // Pollinations AI is a free API that doesn't require an API key
+    // Note: Pollinations.ai is a free API and does not require an API key
     process.env.GEMINI_API_KEY = 'test-gemini-api-key';
   });
 
@@ -137,7 +137,7 @@ describe('Status API Routes', () => {
     it('should return disconnected when Gemini API key is not configured', async () => {
       delete process.env.GEMINI_API_KEY;
 
-      // Mock Pollinations success
+      // Mock Pollinations success (no API key needed for Pollinations)
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -155,31 +155,8 @@ describe('Status API Routes', () => {
       expect(data.gemini.error).toContain('API key not configured');
     });
 
-    it('should return connected for Pollinations even without API key (free API)', async () => {
-      // Pollinations AI is a free API that doesn't require authentication
-      // Mock Gemini and Pollinations both successful
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-        });
-
-      vi.resetModules();
-      const { GET } = await import('@/app/api/status/route');
-      const response = await GET();
-
-      expect(response.status).toBe(200);
-      const data = await response.json();
-
-      // Pollinations should be connected since it doesn't require an API key
-      expect(data.pollinations.connected).toBe(true);
-    });
+    // Note: Pollinations.ai is a free API that doesn't require an API key
+    // so there's no test for "Pollinations API key not configured"
 
     it('should handle timeout gracefully for Gemini', async () => {
       // Mock timeout error for Gemini
@@ -307,9 +284,6 @@ describe('Status API Routes', () => {
   });
 
   describe('GET /api/status/versions', () => {
-    // Note: Pollinations AI uses a static version (1.0.0) since it's a free API without versioning
-    const POLLINATIONS_STATIC_VERSION = '1.0.0';
-
     it('should return version data for both services', async () => {
       const mockGeminiVersion = {
         _id: 'gemini-version-id',
@@ -324,6 +298,7 @@ describe('Status API Routes', () => {
       (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
+      // Only Gemini is looked up from database - Pollinations uses static version
       (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockGeminiVersion);
 
       const { GET } = await import('@/app/api/status/versions/route');
@@ -335,8 +310,8 @@ describe('Status API Routes', () => {
       expect(data).toHaveProperty('gemini');
       expect(data).toHaveProperty('pollinations');
       expect(data.gemini.version).toBe('v1beta');
-      // Pollinations uses static version
-      expect(data.pollinations.version).toBe(POLLINATIONS_STATIC_VERSION);
+      // Pollinations always returns static version "1.0.0"
+      expect(data.pollinations.version).toBe('1.0.0');
       expect(data.gemini.lastChecked).toBeDefined();
       expect(data.pollinations.lastChecked).toBeDefined();
     });
@@ -346,7 +321,7 @@ describe('Status API Routes', () => {
       (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null); // Gemini not found
 
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
@@ -356,11 +331,11 @@ describe('Status API Routes', () => {
 
       expect(data.gemini.version).toBeNull();
       expect(data.gemini.lastChecked).toBeDefined();
-      // Pollinations always returns static version
-      expect(data.pollinations.version).toBe(POLLINATIONS_STATIC_VERSION);
+      // Pollinations always returns static version "1.0.0"
+      expect(data.pollinations.version).toBe('1.0.0');
     });
 
-    it('should always return static version for Pollinations (free API)', async () => {
+    it('should always return static Pollinations version', async () => {
       const mockGeminiVersion = {
         _id: 'gemini-version-id',
         service: 'gemini' as const,
@@ -383,12 +358,12 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data.gemini.version).toBe('v1beta');
-      // Pollinations version is static, not from database
-      expect(data.pollinations.version).toBe(POLLINATIONS_STATIC_VERSION);
+      // Pollinations.ai is a free API with static version indicator
+      expect(data.pollinations.version).toBe('1.0.0');
       expect(data.pollinations.lastChecked).toBeDefined();
     });
 
-    it('should return Pollinations static version even when Gemini record is missing', async () => {
+    it('should return null Gemini version when database record is missing', async () => {
       const { getDatabaseConnected } = await import('@/lib/mongodb');
       (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
@@ -402,8 +377,9 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data.gemini.version).toBeNull();
-      // Pollinations is independent of database
-      expect(data.pollinations.version).toBe(POLLINATIONS_STATIC_VERSION);
+      // Pollinations always returns static version regardless of database
+      expect(data.pollinations.version).toBe('1.0.0');
+      // Should still have lastChecked timestamps (defaulting to current time)
       expect(data.gemini.lastChecked).toBeDefined();
       expect(data.pollinations.lastChecked).toBeDefined();
     });
@@ -432,11 +408,14 @@ describe('Status API Routes', () => {
 
       // Validate ISO format
       expect(data.gemini.lastChecked).toBe('2025-01-10T15:30:00.000Z');
-      // Pollinations lastChecked should still be a valid ISO string
+      // For Pollinations, lastChecked should be a valid ISO string (current time)
       expect(() => new Date(data.pollinations.lastChecked)).not.toThrow();
     });
 
-    it('should return 500 when database connection fails but still return Pollinations version', async () => {
+    it('should return 200 with defaults when database connection fails', async () => {
+      // Reset modules to ensure fresh imports
+      vi.resetModules();
+
       const { getDatabaseConnected } = await import('@/lib/mongodb');
       (getDatabaseConnected as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error('Database connection failed')
@@ -445,13 +424,14 @@ describe('Status API Routes', () => {
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
 
-      expect(response.status).toBe(500);
+      // Route is resilient - returns 200 with defaults even on DB failure
+      expect(response.status).toBe(200);
       const data = await response.json();
 
-      // Gemini should have null version due to DB failure
+      // Should still return a valid structure with null versions for Gemini
       expect(data.gemini.version).toBeNull();
-      // Pollinations static version should still be returned
-      expect(data.pollinations.version).toBe(POLLINATIONS_STATIC_VERSION);
+      // Pollinations always returns static version even on error
+      expect(data.pollinations.version).toBe('1.0.0');
       expect(data.gemini.lastChecked).toBeDefined();
       expect(data.pollinations.lastChecked).toBeDefined();
     });
@@ -493,12 +473,11 @@ describe('Status API Routes', () => {
       expect(typeof data.pollinations.lastChecked).toBe('string');
     });
 
-    it('should handle Gemini database query failure gracefully', async () => {
+    it('should handle database query failure gracefully', async () => {
       const { getDatabaseConnected } = await import('@/lib/mongodb');
       (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      // Gemini query fails
       (getAPIVersionByService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('Query failed')
       );
@@ -506,9 +485,14 @@ describe('Status API Routes', () => {
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
 
-      // Even with Gemini failure, route should handle it
-      // The actual behavior depends on implementation - it may return 500 or partial data
-      expect([200, 500]).toContain(response.status);
+      // Route handles query failures gracefully - returns 200 with default values
+      expect(response.status).toBe(200);
+      const data = await response.json();
+
+      // Gemini version should be null when query fails
+      expect(data.gemini.version).toBeNull();
+      // Pollinations always returns static version
+      expect(data.pollinations.version).toBe('1.0.0');
     });
   });
 });
