@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Mock the MongoDB connection and api-versions module
 vi.mock('@/lib/mongodb', () => ({
   getDatabase: vi.fn(),
+  getDatabaseConnected: vi.fn(),
 }));
 
 vi.mock('@/lib/db/api-versions', () => ({
@@ -20,8 +21,8 @@ describe('Status API Routes', () => {
     vi.clearAllMocks();
     vi.resetModules();
     // Set up default environment variables
+    // Note: Pollinations.ai is a free API and does not require an API key
     process.env.GEMINI_API_KEY = 'test-gemini-api-key';
-    process.env.NANO_BANANA_API_KEY = 'test-nanobanana-api-key';
   });
 
   afterEach(() => {
@@ -52,15 +53,15 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data).toHaveProperty('gemini');
-      expect(data).toHaveProperty('nanobanana');
+      expect(data).toHaveProperty('pollinations');
       expect(data.gemini.connected).toBe(true);
-      expect(data.nanobanana.connected).toBe(true);
+      expect(data.pollinations.connected).toBe(true);
       expect(data.gemini.latency).toBeDefined();
-      expect(data.nanobanana.latency).toBeDefined();
+      expect(data.pollinations.latency).toBeDefined();
     });
 
     it('should return disconnected status when Gemini API fails', async () => {
-      // Mock failed Gemini response, successful Nano Banana
+      // Mock failed Gemini response, successful Pollinations
       mockFetch
         .mockResolvedValueOnce({
           ok: false,
@@ -81,11 +82,11 @@ describe('Status API Routes', () => {
 
       expect(data.gemini.connected).toBe(false);
       expect(data.gemini.error).toContain('HTTP 401');
-      expect(data.nanobanana.connected).toBe(true);
+      expect(data.pollinations.connected).toBe(true);
     });
 
-    it('should return disconnected status when Nano Banana API fails', async () => {
-      // Mock successful Gemini, failed Nano Banana
+    it('should return disconnected status when Pollinations API fails', async () => {
+      // Mock successful Gemini, failed Pollinations
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
@@ -105,8 +106,8 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data.gemini.connected).toBe(true);
-      expect(data.nanobanana.connected).toBe(false);
-      expect(data.nanobanana.error).toContain('HTTP 500');
+      expect(data.pollinations.connected).toBe(false);
+      expect(data.pollinations.error).toContain('HTTP 500');
     });
 
     it('should return disconnected status when both APIs fail', async () => {
@@ -130,13 +131,13 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data.gemini.connected).toBe(false);
-      expect(data.nanobanana.connected).toBe(false);
+      expect(data.pollinations.connected).toBe(false);
     });
 
     it('should return disconnected when Gemini API key is not configured', async () => {
       delete process.env.GEMINI_API_KEY;
 
-      // Mock Nano Banana success
+      // Mock Pollinations success (no API key needed for Pollinations)
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -154,26 +155,8 @@ describe('Status API Routes', () => {
       expect(data.gemini.error).toContain('API key not configured');
     });
 
-    it('should return disconnected when Nano Banana API key is not configured', async () => {
-      delete process.env.NANO_BANANA_API_KEY;
-
-      // Mock Gemini success
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      vi.resetModules();
-      const { GET } = await import('@/app/api/status/route');
-      const response = await GET();
-
-      expect(response.status).toBe(200);
-      const data = await response.json();
-
-      expect(data.nanobanana.connected).toBe(false);
-      expect(data.nanobanana.error).toContain('API key not configured');
-    });
+    // Note: Pollinations.ai is a free API that doesn't require an API key
+    // so there's no test for "Pollinations API key not configured"
 
     it('should handle timeout gracefully for Gemini', async () => {
       // Mock timeout error for Gemini
@@ -194,11 +177,11 @@ describe('Status API Routes', () => {
 
       expect(data.gemini.connected).toBe(false);
       expect(data.gemini.error).toContain('aborted');
-      expect(data.nanobanana.connected).toBe(true);
+      expect(data.pollinations.connected).toBe(true);
     });
 
-    it('should handle timeout gracefully for Nano Banana', async () => {
-      // Mock timeout error for Nano Banana
+    it('should handle timeout gracefully for Pollinations', async () => {
+      // Mock timeout error for Pollinations
       const timeoutError = new Error('The operation was aborted');
       timeoutError.name = 'TimeoutError';
 
@@ -217,8 +200,8 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data.gemini.connected).toBe(true);
-      expect(data.nanobanana.connected).toBe(false);
-      expect(data.nanobanana.error).toContain('aborted');
+      expect(data.pollinations.connected).toBe(false);
+      expect(data.pollinations.error).toContain('aborted');
     });
 
     it('should handle network errors gracefully', async () => {
@@ -235,8 +218,8 @@ describe('Status API Routes', () => {
 
       expect(data.gemini.connected).toBe(false);
       expect(data.gemini.error).toBe('Network error');
-      expect(data.nanobanana.connected).toBe(false);
-      expect(data.nanobanana.error).toBe('Connection refused');
+      expect(data.pollinations.connected).toBe(false);
+      expect(data.pollinations.error).toBe('Connection refused');
     });
 
     it('should return proper JSON structure', async () => {
@@ -261,7 +244,7 @@ describe('Status API Routes', () => {
       // Validate structure
       expect(typeof data).toBe('object');
       expect(Object.keys(data)).toContain('gemini');
-      expect(Object.keys(data)).toContain('nanobanana');
+      expect(Object.keys(data)).toContain('pollinations');
 
       // Validate gemini structure
       expect(typeof data.gemini.connected).toBe('boolean');
@@ -269,10 +252,10 @@ describe('Status API Routes', () => {
         expect(typeof data.gemini.latency).toBe('number');
       }
 
-      // Validate nanobanana structure
-      expect(typeof data.nanobanana.connected).toBe('boolean');
-      if (data.nanobanana.latency !== undefined) {
-        expect(typeof data.nanobanana.latency).toBe('number');
+      // Validate pollinations structure
+      expect(typeof data.pollinations.connected).toBe('boolean');
+      if (data.pollinations.latency !== undefined) {
+        expect(typeof data.pollinations.latency).toBe('number');
       }
     });
 
@@ -296,7 +279,7 @@ describe('Status API Routes', () => {
 
       // Latency should be a non-negative number
       expect(data.gemini.latency).toBeGreaterThanOrEqual(0);
-      expect(data.nanobanana.latency).toBeGreaterThanOrEqual(0);
+      expect(data.pollinations.latency).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -311,22 +294,12 @@ describe('Status API Routes', () => {
         lastChecked: new Date('2025-01-10T12:00:00Z'),
       };
 
-      const mockNanoBananaVersion = {
-        _id: 'nanobanana-version-id',
-        service: 'nanobanana' as const,
-        currentVersion: 'v1',
-        lastKnownGood: 'v1',
-        availableVersions: ['v1'],
-        lastChecked: new Date('2025-01-10T12:00:00Z'),
-      };
-
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      (getAPIVersionByService as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(mockGeminiVersion)
-        .mockResolvedValueOnce(mockNanoBananaVersion);
+      // Only Gemini is looked up from database - Pollinations uses static version
+      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockGeminiVersion);
 
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
@@ -335,30 +308,20 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data).toHaveProperty('gemini');
-      expect(data).toHaveProperty('nanobanana');
+      expect(data).toHaveProperty('pollinations');
       expect(data.gemini.version).toBe('v1beta');
-      expect(data.nanobanana.version).toBe('v1');
+      // Pollinations always returns static version "1.0.0"
+      expect(data.pollinations.version).toBe('1.0.0');
       expect(data.gemini.lastChecked).toBeDefined();
-      expect(data.nanobanana.lastChecked).toBeDefined();
+      expect(data.pollinations.lastChecked).toBeDefined();
     });
 
     it('should return null version when Gemini version record is missing', async () => {
-      const mockNanoBananaVersion = {
-        _id: 'nanobanana-version-id',
-        service: 'nanobanana' as const,
-        currentVersion: 'v1',
-        lastKnownGood: 'v1',
-        availableVersions: ['v1'],
-        lastChecked: new Date('2025-01-10T12:00:00Z'),
-      };
-
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      (getAPIVersionByService as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(null) // Gemini not found
-        .mockResolvedValueOnce(mockNanoBananaVersion);
+      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null); // Gemini not found
 
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
@@ -368,10 +331,11 @@ describe('Status API Routes', () => {
 
       expect(data.gemini.version).toBeNull();
       expect(data.gemini.lastChecked).toBeDefined();
-      expect(data.nanobanana.version).toBe('v1');
+      // Pollinations always returns static version "1.0.0"
+      expect(data.pollinations.version).toBe('1.0.0');
     });
 
-    it('should return null version when Nano Banana version record is missing', async () => {
+    it('should always return static Pollinations version', async () => {
       const mockGeminiVersion = {
         _id: 'gemini-version-id',
         service: 'gemini' as const,
@@ -381,13 +345,11 @@ describe('Status API Routes', () => {
         lastChecked: new Date('2025-01-10T12:00:00Z'),
       };
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      (getAPIVersionByService as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(mockGeminiVersion)
-        .mockResolvedValueOnce(null); // Nano Banana not found
+      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockGeminiVersion);
 
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
@@ -396,18 +358,17 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data.gemini.version).toBe('v1beta');
-      expect(data.nanobanana.version).toBeNull();
-      expect(data.nanobanana.lastChecked).toBeDefined();
+      // Pollinations.ai is a free API with static version indicator
+      expect(data.pollinations.version).toBe('1.0.0');
+      expect(data.pollinations.lastChecked).toBeDefined();
     });
 
-    it('should return null versions when both version records are missing', async () => {
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    it('should return null Gemini version when database record is missing', async () => {
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      (getAPIVersionByService as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(null);
+      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
 
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
@@ -416,10 +377,11 @@ describe('Status API Routes', () => {
       const data = await response.json();
 
       expect(data.gemini.version).toBeNull();
-      expect(data.nanobanana.version).toBeNull();
+      // Pollinations always returns static version regardless of database
+      expect(data.pollinations.version).toBe('1.0.0');
       // Should still have lastChecked timestamps (defaulting to current time)
       expect(data.gemini.lastChecked).toBeDefined();
-      expect(data.nanobanana.lastChecked).toBeDefined();
+      expect(data.pollinations.lastChecked).toBeDefined();
     });
 
     it('should return lastChecked timestamps in ISO format', async () => {
@@ -433,13 +395,11 @@ describe('Status API Routes', () => {
         lastChecked: lastCheckedDate,
       };
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      (getAPIVersionByService as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(mockGeminiVersion)
-        .mockResolvedValueOnce(null);
+      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockGeminiVersion);
 
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
@@ -448,13 +408,13 @@ describe('Status API Routes', () => {
 
       // Validate ISO format
       expect(data.gemini.lastChecked).toBe('2025-01-10T15:30:00.000Z');
-      // For missing version, lastChecked should still be a valid ISO string
-      expect(() => new Date(data.nanobanana.lastChecked)).not.toThrow();
+      // For Pollinations, lastChecked should be a valid ISO string (current time)
+      expect(() => new Date(data.pollinations.lastChecked)).not.toThrow();
     });
 
     it('should return 500 when database connection fails', async () => {
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockRejectedValue(
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error('Database connection failed')
       );
 
@@ -464,11 +424,12 @@ describe('Status API Routes', () => {
       expect(response.status).toBe(500);
       const data = await response.json();
 
-      // Should still return a valid structure with null versions
+      // Should still return a valid structure with null versions for Gemini
       expect(data.gemini.version).toBeNull();
-      expect(data.nanobanana.version).toBeNull();
+      // Pollinations always returns static version even on error
+      expect(data.pollinations.version).toBe('1.0.0');
       expect(data.gemini.lastChecked).toBeDefined();
-      expect(data.nanobanana.lastChecked).toBeDefined();
+      expect(data.pollinations.lastChecked).toBeDefined();
     });
 
     it('should return proper JSON structure for version response', async () => {
@@ -481,22 +442,11 @@ describe('Status API Routes', () => {
         lastChecked: new Date(),
       };
 
-      const mockNanoBananaVersion = {
-        _id: 'nanobanana-version-id',
-        service: 'nanobanana' as const,
-        currentVersion: 'v1',
-        lastKnownGood: 'v1',
-        availableVersions: ['v1'],
-        lastChecked: new Date(),
-      };
-
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      (getAPIVersionByService as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(mockGeminiVersion)
-        .mockResolvedValueOnce(mockNanoBananaVersion);
+      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockGeminiVersion);
 
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
@@ -506,41 +456,32 @@ describe('Status API Routes', () => {
       // Validate structure
       expect(typeof data).toBe('object');
       expect(Object.keys(data)).toContain('gemini');
-      expect(Object.keys(data)).toContain('nanobanana');
+      expect(Object.keys(data)).toContain('pollinations');
 
       // Validate gemini structure
       expect(Object.keys(data.gemini)).toContain('version');
       expect(Object.keys(data.gemini)).toContain('lastChecked');
       expect(typeof data.gemini.lastChecked).toBe('string');
 
-      // Validate nanobanana structure
-      expect(Object.keys(data.nanobanana)).toContain('version');
-      expect(Object.keys(data.nanobanana)).toContain('lastChecked');
-      expect(typeof data.nanobanana.lastChecked).toBe('string');
+      // Validate pollinations structure
+      expect(Object.keys(data.pollinations)).toContain('version');
+      expect(Object.keys(data.pollinations)).toContain('lastChecked');
+      expect(typeof data.pollinations.lastChecked).toBe('string');
     });
 
-    it('should handle partial database failure gracefully', async () => {
-      const mockGeminiVersion = {
-        _id: 'gemini-version-id',
-        service: 'gemini' as const,
-        currentVersion: 'v1beta',
-        lastKnownGood: 'v1beta',
-        availableVersions: ['v1beta'],
-        lastChecked: new Date(),
-      };
-
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    it('should handle database query failure gracefully', async () => {
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { getAPIVersionByService } = await import('@/lib/db/api-versions');
-      (getAPIVersionByService as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(mockGeminiVersion)
-        .mockRejectedValueOnce(new Error('Query failed'));
+      (getAPIVersionByService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Query failed')
+      );
 
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
 
-      // Even with partial failure, route should handle it
+      // Even with query failure, route should handle it
       // The actual behavior depends on implementation - it may return 500 or partial data
       expect([200, 500]).toContain(response.status);
     });
