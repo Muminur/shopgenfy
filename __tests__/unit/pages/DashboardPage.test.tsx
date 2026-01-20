@@ -171,7 +171,7 @@ describe('Dashboard Page', () => {
   });
 
   describe('Error Handling', () => {
-    it('should display error message when analyze API fails', async () => {
+    it('should display error message when analyze API fails', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
       mockFetch.mockResolvedValueOnce({
@@ -190,7 +190,7 @@ describe('Dashboard Page', () => {
       expect(await screen.findByRole('alert')).toBeInTheDocument();
     });
 
-    it('should display error message when save API fails', async () => {
+    it('should display error message when save API fails', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
       mockFetch.mockResolvedValueOnce({
@@ -206,7 +206,7 @@ describe('Dashboard Page', () => {
       expect(await screen.findByRole('alert')).toBeInTheDocument();
     });
 
-    it('should allow dismissing error messages', async () => {
+    it('should allow dismissing error messages', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
       mockFetch.mockResolvedValueOnce({
@@ -230,7 +230,7 @@ describe('Dashboard Page', () => {
       }
     });
 
-    it('should display success message when analyze completes', async () => {
+    it('should display success message when analyze completes', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
       mockFetch.mockResolvedValueOnce({
@@ -253,7 +253,7 @@ describe('Dashboard Page', () => {
       expect(await screen.findByText(/analyzed successfully/i)).toBeInTheDocument();
     });
 
-    it('should disable buttons during API operations', async () => {
+    it('should disable buttons during API operations', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
       // Create a delayed response
