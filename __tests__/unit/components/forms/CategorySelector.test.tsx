@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
+import { CategorySelector } from '@/components/forms/CategorySelector';
 
 describe('CategorySelector', () => {
   const categories = [
@@ -11,8 +12,7 @@ describe('CategorySelector', () => {
     'Customer Support',
   ];
 
-  it('should render primary category selector', async () => {
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
+  it('should render primary category selector', () => {
     render(
       <CategorySelector
         categories={categories}
@@ -26,8 +26,7 @@ describe('CategorySelector', () => {
     expect(screen.getByText('Primary Category')).toBeInTheDocument();
   });
 
-  it('should render secondary category selector', async () => {
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
+  it('should render secondary category selector', () => {
     render(
       <CategorySelector
         categories={categories}
@@ -41,9 +40,8 @@ describe('CategorySelector', () => {
     expect(screen.getByText('Secondary Category (Optional)')).toBeInTheDocument();
   });
 
-  it('should call onPrimaryCategoryChange when primary category selected', async () => {
+  it('should call onPrimaryCategoryChange when primary category selected', () => {
     const onChange = vi.fn();
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
     render(
       <CategorySelector
         categories={categories}
@@ -60,9 +58,8 @@ describe('CategorySelector', () => {
     expect(onChange).toHaveBeenCalledWith('Store Management');
   });
 
-  it('should call onSecondaryCategoryChange when secondary category selected', async () => {
+  it('should call onSecondaryCategoryChange when secondary category selected', () => {
     const onChange = vi.fn();
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
     render(
       <CategorySelector
         categories={categories}
@@ -82,8 +79,7 @@ describe('CategorySelector', () => {
     expect(onChange).toHaveBeenCalledWith('Sales and Marketing');
   });
 
-  it('should show feature tags multiselect', async () => {
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
+  it('should show feature tags multiselect', () => {
     render(
       <CategorySelector
         categories={categories}
@@ -97,8 +93,7 @@ describe('CategorySelector', () => {
     expect(screen.getByText('Feature Tags')).toBeInTheDocument();
   });
 
-  it('should enforce max 25 feature tags', async () => {
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
+  it('should enforce max 25 feature tags', () => {
     const tags = Array(25)
       .fill('')
       .map((_, i) => `tag-${i}`);
@@ -122,9 +117,8 @@ describe('CategorySelector', () => {
     expect(screen.getByText(/maximum 25 items allowed/i)).toBeInTheDocument();
   });
 
-  it('should call onTagsChange when tags change', async () => {
+  it('should call onTagsChange when tags change', () => {
     const onTagsChange = vi.fn();
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
 
     render(
       <CategorySelector
@@ -140,8 +134,7 @@ describe('CategorySelector', () => {
     expect(onTagsChange).toBeDefined();
   });
 
-  it('should display helper text for each field', async () => {
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
+  it('should display helper text for each field', () => {
     render(
       <CategorySelector
         categories={categories}
@@ -157,8 +150,7 @@ describe('CategorySelector', () => {
     ).toBeInTheDocument();
   });
 
-  it('should mark primary category as required', async () => {
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
+  it('should mark primary category as required', () => {
     render(
       <CategorySelector
         categories={categories}
@@ -173,8 +165,7 @@ describe('CategorySelector', () => {
     expect(label.querySelector('span')).toHaveTextContent('*');
   });
 
-  it('should filter secondary category options to exclude primary', async () => {
-    const { CategorySelector } = await import('@/components/forms/CategorySelector');
+  it('should filter secondary category options to exclude primary', () => {
     const { container } = render(
       <CategorySelector
         categories={categories}
