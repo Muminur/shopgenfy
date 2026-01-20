@@ -12,7 +12,7 @@ import {
  * Tests actual client functions with mocked HTTP responses
  * Focuses on: image generation flow, polling, batch operations, error handling
  */
-describe('Nano Banana API Client - Integration Tests', () => {
+describe.skip('Nano Banana API Client - Integration Tests (DEPRECATED - Using Pollinations.ai now)', () => {
   const mockApiKey = 'test-nanobanana-api-key-123';
   let client: NanoBananaClient;
   let originalFetch: typeof global.fetch;

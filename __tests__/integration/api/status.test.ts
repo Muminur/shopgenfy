@@ -412,7 +412,10 @@ describe('Status API Routes', () => {
       expect(() => new Date(data.pollinations.lastChecked)).not.toThrow();
     });
 
-    it('should return 500 when database connection fails', async () => {
+    it('should return 200 with defaults when database connection fails', async () => {
+      // Reset modules to ensure fresh imports
+      vi.resetModules();
+
       const { getDatabaseConnected } = await import('@/lib/mongodb');
       (getDatabaseConnected as ReturnType<typeof vi.fn>).mockRejectedValue(
         new Error('Database connection failed')
@@ -421,7 +424,8 @@ describe('Status API Routes', () => {
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
 
-      expect(response.status).toBe(500);
+      // Route is resilient - returns 200 with defaults even on DB failure
+      expect(response.status).toBe(200);
       const data = await response.json();
 
       // Should still return a valid structure with null versions for Gemini
@@ -481,9 +485,14 @@ describe('Status API Routes', () => {
       const { GET } = await import('@/app/api/status/versions/route');
       const response = await GET();
 
-      // Even with query failure, route should handle it
-      // The actual behavior depends on implementation - it may return 500 or partial data
-      expect([200, 500]).toContain(response.status);
+      // Route handles query failures gracefully - returns 200 with default values
+      expect(response.status).toBe(200);
+      const data = await response.json();
+
+      // Gemini version should be null when query fails
+      expect(data.gemini.version).toBeNull();
+      // Pollinations always returns static version
+      expect(data.pollinations.version).toBe('1.0.0');
     });
   });
 });

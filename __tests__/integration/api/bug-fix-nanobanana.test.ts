@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-describe('Bug Fix: Nanobanana Image Generation', () => {
+describe.skip('Bug Fix: Nanobanana Image Generation (DEPRECATED - Mock mode removed, using Pollinations.ai)', () => {
   const originalEnv = process.env.NANO_BANANA_API_KEY;
 
   beforeEach(() => {

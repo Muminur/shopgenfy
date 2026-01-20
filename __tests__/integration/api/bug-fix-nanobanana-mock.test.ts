@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { POST } from '@/app/api/nanobanana/generate/route';
 import { NextRequest } from 'next/server';
 
-describe('Bug Fix: Nanobanana Mock Mode for Missing API Key', () => {
+describe.skip('Bug Fix: Nanobanana Mock Mode for Missing API Key (DEPRECATED - Mock mode removed, using Pollinations.ai)', () => {
   const baseUrl = 'http://localhost:3000';
   let originalApiKey: string | undefined;
   let originalMockMode: string | undefined;

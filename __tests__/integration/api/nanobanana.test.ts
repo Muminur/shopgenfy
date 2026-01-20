@@ -113,9 +113,22 @@ describe('Nano Banana API Routes', () => {
       expect(data.error).toContain('type');
     });
 
-    it('should return 500 when API key is not configured and mock mode explicitly disabled', async () => {
+    it('should work without API key (Pollinations.ai is FREE)', async () => {
       delete process.env.NANO_BANANA_API_KEY;
-      process.env.NANO_BANANA_MOCK_MODE = 'false'; // Explicitly disable mock mode
+
+      const mockResult = {
+        jobId: 'pollinations-icon-123',
+        status: 'completed',
+        imageUrl: 'https://image.pollinations.ai/prompt/test',
+        width: 1200,
+        height: 1200,
+        format: 'png',
+      };
+
+      const { createNanoBananaClient } = await import('@/lib/nanobanana');
+      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
+        generateImage: vi.fn().mockResolvedValue(mockResult),
+      });
 
       vi.resetModules();
       const { POST } = await import('@/app/api/nanobanana/generate/route');
@@ -130,7 +143,10 @@ describe('Nano Banana API Routes', () => {
 
       const response = await POST(request);
 
-      expect(response.status).toBe(500);
+      // Should succeed because Pollinations.ai doesn't need an API key
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.jobId).toBeDefined();
     });
 
     it('should return 500 when generation fails', async () => {
