@@ -1,11 +1,9 @@
 import { IMAGE_SPECS, FORBIDDEN_PATTERNS } from './validators/constants';
 import type { ImageType, ImageFormat } from './validators/image';
 
-const NANOBANANA_API_BASE = 'https://api.nanobanana.io/v1';
-const MAX_RETRIES = 3;
-const DEFAULT_POLL_INTERVAL = 1000;
+const POLLINATIONS_API_BASE = 'https://image.pollinations.ai/prompt';
 const DEFAULT_TIMEOUT = 120000;
-const INITIAL_RETRY_DELAY = 1000;
+const MAX_PROMPT_LENGTH = 2000;
 
 export type { ImageType, ImageFormat };
 export type ImageStyle = 'flat' | 'modern' | 'gradient' | 'minimalist' | '3d';
@@ -91,65 +89,23 @@ function validateImageType(type: string): type is ImageType {
   return type === 'icon' || type === 'feature';
 }
 
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  apiKey: string,
-  retries = MAX_RETRIES,
-  delay = INITIAL_RETRY_DELAY
-): Promise<Response> {
-  let lastError: Error | null = null;
+/**
+ * Creates a Pollinations.ai client for image generation.
+ * Pollinations.ai is a FREE API that doesn't require authentication.
+ * @param apiKey - Optional API key (kept for backwards compatibility, not used)
+ * @returns NanoBananaClient interface for image generation
+ */
+export function createNanoBananaClient(_apiKey?: string): NanoBananaClient {
+  // Pollinations.ai is FREE and doesn't require an API key
+  // We keep the apiKey parameter for backwards compatibility but don't use it
 
-  const headers = {
-    ...((options.headers as Record<string, string>) || {}),
-    Authorization: `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
-  };
-
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await fetch(url, { ...options, headers });
-
-      if (response.ok) {
-        return response;
-      }
-
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('retry-after');
-        const waitTime = retryAfter ? parseInt(retryAfter, 10) * 1000 : delay;
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
-        delay *= 2;
-        continue;
-      }
-
-      if (response.status >= 500 && attempt < retries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-        continue;
-      }
-
-      const errorBody = await response.json().catch(() => ({}));
-      throw new NanoBananaError(errorBody?.error || response.statusText, response.status);
-    } catch (error) {
-      if (error instanceof NanoBananaError) {
-        throw error;
-      }
-      lastError = error as Error;
-      if (attempt < retries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-      }
-    }
-  }
-
-  throw new NanoBananaError(lastError?.message || 'Request failed after retries');
-}
-
-export function createNanoBananaClient(apiKey: string): NanoBananaClient {
-  if (!apiKey || apiKey.trim() === '') {
-    throw new NanoBananaError('API key is required');
-  }
-
+  /**
+   * Generates an image using Pollinations.ai free API
+   * @param request - Image generation parameters including type, prompt, and style
+   * @param options - Optional configuration including timeout
+   * @returns Promise resolving to generated image result with URL and metadata
+   * @throws {NanoBananaError} If validation fails or generation errors occur
+   */
   async function generateImage(
     request: ImageGenerationRequest,
     options: GenerateOptions = {}
@@ -162,70 +118,81 @@ export function createNanoBananaClient(apiKey: string): NanoBananaClient {
       throw new NanoBananaError('Prompt is required');
     }
 
+    if (request.prompt.length > MAX_PROMPT_LENGTH) {
+      throw new NanoBananaError(`Prompt exceeds maximum length of ${MAX_PROMPT_LENGTH} characters`);
+    }
+
     if (FORBIDDEN_PATTERNS.SHOPIFY_BRANDING.test(request.prompt)) {
       throw new NanoBananaError('Prompt cannot contain Shopify branding');
     }
 
     const dimensions = getImageDimensions(request.type);
-    const pollInterval = options.pollInterval || DEFAULT_POLL_INTERVAL;
     const timeout = options.timeout || DEFAULT_TIMEOUT;
 
-    const requestBody = {
-      prompt: request.prompt,
-      width: dimensions.width,
-      height: dimensions.height,
-      style: request.style || 'modern',
-      negativePrompt:
-        request.negativePrompt || 'blurry, low quality, text, watermark, logo, shopify',
-      featureHighlight: request.featureHighlight,
-    };
+    // Build enhanced prompt with style and negative patterns
+    const styleModifier = request.style ? `, ${request.style} style` : '';
+    const negativePatterns =
+      request.negativePrompt || 'blurry, low quality, text, watermark, logo, shopify branding';
+    const enhancedPrompt = `${request.prompt}${styleModifier}, no ${negativePatterns}`;
 
-    const startResponse = await fetchWithRetry(
-      `${NANOBANANA_API_BASE}/generate`,
-      {
-        method: 'POST',
-        body: JSON.stringify(requestBody),
-      },
-      apiKey
-    );
+    // Generate seed for consistent style (use timestamp + random for uniqueness)
+    const seed = Math.floor(Math.random() * 1000000);
 
-    const startData = await startResponse.json();
-    const jobId = startData.jobId;
+    // Build Pollinations.ai URL (FREE API - no authentication needed)
+    const encodedPrompt = encodeURIComponent(enhancedPrompt);
+    const pollinationsUrl = `${POLLINATIONS_API_BASE}/${encodedPrompt}?width=${dimensions.width}&height=${dimensions.height}&seed=${seed}&nologo=true&enhance=true`;
 
-    if (startData.status === 'completed') {
+    // Generate unique job ID for tracking
+    const jobId = `pollinations-${request.type}-${Date.now()}-${seed}`;
+
+    // Create AbortController for proper timeout handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      // Fetch image from Pollinations.ai with timeout support
+      const response = await fetch(pollinationsUrl, { signal: controller.signal });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new NanoBananaError(
+          `Pollinations.ai API error: ${response.status} ${response.statusText}`,
+          response.status
+        );
+      }
+
+      // Verify it's an image
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('image')) {
+        throw new NanoBananaError('Response is not an image');
+      }
+
+      // Return the direct image URL (Pollinations.ai returns the image directly)
       return {
         jobId,
         status: 'completed',
-        imageUrl: startData.imageUrl,
+        imageUrl: pollinationsUrl,
         width: dimensions.width,
         height: dimensions.height,
         format: 'png',
       };
-    }
+    } catch (error) {
+      clearTimeout(timeoutId);
 
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeout) {
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
-
-      const status = await getJobStatus(jobId);
-
-      if (status.status === 'completed') {
-        return {
-          jobId,
-          status: 'completed',
-          imageUrl: status.imageUrl,
-          width: dimensions.width,
-          height: dimensions.height,
-          format: 'png',
-        };
+      if (error instanceof NanoBananaError) {
+        throw error;
       }
 
-      if (status.status === 'failed') {
-        throw new NanoBananaError(status.error || 'Image generation failed');
+      // Handle AbortController timeout
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new NanoBananaError('Image generation timed out');
       }
-    }
 
-    throw new NanoBananaError('Image generation timed out');
+      throw new NanoBananaError(
+        `Failed to generate image: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
   }
 
   async function generateBatch(
@@ -246,25 +213,35 @@ export function createNanoBananaClient(apiKey: string): NanoBananaClient {
   }
 
   async function getJobStatus(jobId: string): Promise<JobStatus> {
-    const response = await fetchWithRetry(
-      `${NANOBANANA_API_BASE}/jobs/${jobId}`,
-      { method: 'GET' },
-      apiKey
-    );
+    // Pollinations.ai generates images synchronously, so all jobs are either completed or failed
+    // Parse the jobId to check if it's a valid Pollinations job
+    if (!jobId.startsWith('pollinations-')) {
+      throw new NanoBananaError('Invalid job ID');
+    }
 
-    return response.json();
+    // Since Pollinations.ai is synchronous, we can only return completed status
+    return {
+      jobId,
+      status: 'completed',
+      progress: 100,
+    };
   }
 
   async function checkVersion(): Promise<VersionInfo> {
-    const response = await fetchWithRetry(
-      `${NANOBANANA_API_BASE}/version`,
-      { method: 'GET' },
-      apiKey
-    );
-
-    return response.json();
+    // Pollinations.ai doesn't have versioning - return static info
+    return {
+      version: '1.0.0',
+      releaseDate: new Date().toISOString(),
+      features: ['Free API', 'No authentication required', 'Direct image generation'],
+    };
   }
 
+  /**
+   * Regenerates an existing image with a new seed while preserving the original prompt
+   * @param imageId - The ID of the image to regenerate
+   * @returns Promise resolving to the newly generated image result
+   * @throws {NanoBananaError} If image is not found or generation fails
+   */
   async function regenerateImage(imageId: string): Promise<GeneratedImageResult> {
     // Import db operations and connection dynamically to avoid circular dependencies
     const { getImageById, updateImage } = await import('./db/images');
@@ -284,17 +261,13 @@ export function createNanoBananaClient(apiKey: string): NanoBananaClient {
       featureHighlight: originalImage.featureHighlighted,
     };
 
-    // Add styleSeed if available for consistency
-    const styleSeed = (originalImage as any).styleSeed;
-
     const result = await generateImage(request);
 
-    // Update database with new image data
+    // Update database with new image data and increment version
     await updateImage(db, imageId, {
       driveUrl: result.imageUrl || '',
       driveFileId: result.jobId,
-      version: ((originalImage as any).version || 1) + 1,
-      ...(styleSeed && { styleSeed }),
+      version: originalImage.version + 1,
     });
 
     return result;
