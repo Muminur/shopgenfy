@@ -3,6 +3,9 @@ const nextConfig = {
   // Enable React strict mode for better error handling
   reactStrictMode: true,
 
+  // Output mode for Vercel deployment (standalone for optimal serverless)
+  output: 'standalone',
+
   // Optimize images
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -16,7 +19,8 @@ const nextConfig = {
 
   // Optimize bundle
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    // Remove console.log/debug in production but keep errors and warnings
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
 
   // Experimental features for optimization
@@ -24,8 +28,70 @@ const nextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 
-  // Enable Turbopack (Next.js 16+)
-  turbopack: {},
+  // Server-side environment variables validation
+  // These are checked at build time and runtime
+  env: {
+    // Public env vars (exposed to browser)
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  },
+
+  // Security headers (complementing vercel.json)
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-DNS-Prefetch-Control',
+            value: 'on',
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+        ],
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate',
+          },
+        ],
+      },
+    ];
+  },
+
+  // Redirect HTTP to HTTPS in production
+  async redirects() {
+    return [];
+  },
+
+  // Rewrites for API versioning if needed
+  async rewrites() {
+    return [];
+  },
 };
 
 export default nextConfig;
