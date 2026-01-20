@@ -18,7 +18,7 @@ describe('APIStatusCard', () => {
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -35,7 +35,7 @@ describe('APIStatusCard', () => {
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -47,12 +47,12 @@ describe('APIStatusCard', () => {
       });
     });
 
-    it('should display Nano Banana API status indicator', async () => {
+    it('should display Pollinations AI status indicator', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -60,7 +60,7 @@ describe('APIStatusCard', () => {
       render(<APIStatusCard />);
 
       await waitFor(() => {
-        expect(screen.getByText('Nano Banana API')).toBeInTheDocument();
+        expect(screen.getByText('Pollinations AI')).toBeInTheDocument();
       });
     });
 
@@ -82,7 +82,7 @@ describe('APIStatusCard', () => {
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -95,12 +95,12 @@ describe('APIStatusCard', () => {
       });
     });
 
-    it('should show connected status for Nano Banana when API is reachable', async () => {
+    it('should show connected status for Pollinations AI when API is reachable', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -108,8 +108,8 @@ describe('APIStatusCard', () => {
       render(<APIStatusCard />);
 
       await waitFor(() => {
-        const nanoBananaSection = screen.getByLabelText('Nano Banana API connection status');
-        expect(within(nanoBananaSection).getByText('Connected')).toBeInTheDocument();
+        const pollinationsSection = screen.getByLabelText('Pollinations AI connection status');
+        expect(within(pollinationsSection).getByText('Connected')).toBeInTheDocument();
       });
     });
 
@@ -118,7 +118,7 @@ describe('APIStatusCard', () => {
         ok: true,
         json: async () => ({
           gemini: { connected: false, error: 'Connection failed' },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -131,12 +131,12 @@ describe('APIStatusCard', () => {
       });
     });
 
-    it('should show disconnected status when Nano Banana API is not reachable', async () => {
+    it('should show disconnected status when Pollinations AI is not reachable', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: false, error: 'Connection failed' },
+          pollinations: { connected: false, error: 'Connection failed' },
         }),
       });
 
@@ -144,8 +144,8 @@ describe('APIStatusCard', () => {
       render(<APIStatusCard />);
 
       await waitFor(() => {
-        const nanoBananaSection = screen.getByLabelText('Nano Banana API connection status');
-        expect(within(nanoBananaSection).getByText('Disconnected')).toBeInTheDocument();
+        const pollinationsSection = screen.getByLabelText('Pollinations AI connection status');
+        expect(within(pollinationsSection).getByText('Disconnected')).toBeInTheDocument();
       });
     });
   });
@@ -183,7 +183,7 @@ describe('APIStatusCard', () => {
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -192,7 +192,7 @@ describe('APIStatusCard', () => {
 
       await waitFor(() => {
         expect(screen.getByLabelText('Gemini API connection status')).toBeInTheDocument();
-        expect(screen.getByLabelText('Nano Banana API connection status')).toBeInTheDocument();
+        expect(screen.getByLabelText('Pollinations AI connection status')).toBeInTheDocument();
       });
     });
 
@@ -201,7 +201,7 @@ describe('APIStatusCard', () => {
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -221,7 +221,7 @@ describe('APIStatusCard', () => {
         ok: true,
         json: async () => ({
           gemini: { connected: true, latency: 120 },
-          nanobanana: { connected: true, latency: 85 },
+          pollinations: { connected: true, latency: 85 },
         }),
       });
 
@@ -240,7 +240,7 @@ describe('APIStatusCard', () => {
         ok: true,
         json: async () => ({
           gemini: { connected: false, error: 'Connection failed' },
-          nanobanana: { connected: false, error: 'Connection failed' },
+          pollinations: { connected: false, error: 'Connection failed' },
         }),
       });
 
@@ -268,7 +268,7 @@ describe('VersionInfoCard', () => {
         ok: true,
         json: async () => ({
           gemini: { version: 'v1beta', lastChecked: new Date().toISOString() },
-          nanobanana: { version: '2.1.0', lastChecked: new Date().toISOString() },
+          pollinations: { version: '2.1.0', lastChecked: new Date().toISOString() },
         }),
       });
 
@@ -285,7 +285,7 @@ describe('VersionInfoCard', () => {
         ok: true,
         json: async () => ({
           gemini: { version: 'v1beta', lastChecked: new Date().toISOString() },
-          nanobanana: { version: '2.1.0', lastChecked: new Date().toISOString() },
+          pollinations: { version: '2.1.0', lastChecked: new Date().toISOString() },
         }),
       });
 
@@ -298,12 +298,12 @@ describe('VersionInfoCard', () => {
       });
     });
 
-    it('should display Nano Banana API version', async () => {
+    it('should display Pollinations AI version', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           gemini: { version: 'v1beta', lastChecked: new Date().toISOString() },
-          nanobanana: { version: '2.1.0', lastChecked: new Date().toISOString() },
+          pollinations: { version: '2.1.0', lastChecked: new Date().toISOString() },
         }),
       });
 
@@ -311,7 +311,7 @@ describe('VersionInfoCard', () => {
       render(<VersionInfoCard />);
 
       await waitFor(() => {
-        expect(screen.getByText('Nano Banana API')).toBeInTheDocument();
+        expect(screen.getByText('Pollinations AI')).toBeInTheDocument();
         expect(screen.getByText('2.1.0')).toBeInTheDocument();
       });
     });
@@ -335,7 +335,7 @@ describe('VersionInfoCard', () => {
         ok: true,
         json: async () => ({
           gemini: { version: 'v1beta', lastChecked },
-          nanobanana: { version: '2.1.0', lastChecked },
+          pollinations: { version: '2.1.0', lastChecked },
         }),
       });
 
@@ -353,7 +353,7 @@ describe('VersionInfoCard', () => {
         ok: true,
         json: async () => ({
           gemini: { version: 'v1beta', lastChecked },
-          nanobanana: { version: '2.1.0', lastChecked },
+          pollinations: { version: '2.1.0', lastChecked },
         }),
       });
 
@@ -385,7 +385,7 @@ describe('VersionInfoCard', () => {
         ok: true,
         json: async () => ({
           gemini: { version: null, lastChecked: new Date().toISOString() },
-          nanobanana: { version: null, lastChecked: new Date().toISOString() },
+          pollinations: { version: null, lastChecked: new Date().toISOString() },
         }),
       });
 
@@ -405,7 +405,7 @@ describe('VersionInfoCard', () => {
         ok: true,
         json: async () => ({
           gemini: { version: 'v1beta', lastChecked: new Date().toISOString() },
-          nanobanana: { version: '2.1.0', lastChecked: new Date().toISOString() },
+          pollinations: { version: '2.1.0', lastChecked: new Date().toISOString() },
         }),
       });
 
@@ -414,7 +414,7 @@ describe('VersionInfoCard', () => {
 
       await waitFor(() => {
         expect(screen.getByLabelText('Gemini API version information')).toBeInTheDocument();
-        expect(screen.getByLabelText('Nano Banana API version information')).toBeInTheDocument();
+        expect(screen.getByLabelText('Pollinations AI version information')).toBeInTheDocument();
       });
     });
 
@@ -423,7 +423,7 @@ describe('VersionInfoCard', () => {
         ok: true,
         json: async () => ({
           gemini: { version: 'v1beta', lastChecked: new Date().toISOString() },
-          nanobanana: { version: '2.1.0', lastChecked: new Date().toISOString() },
+          pollinations: { version: '2.1.0', lastChecked: new Date().toISOString() },
         }),
       });
 
@@ -443,7 +443,7 @@ describe('VersionInfoCard', () => {
         ok: true,
         json: async () => ({
           gemini: { version: 'v1beta', lastChecked: new Date().toISOString() },
-          nanobanana: { version: '2.1.0', lastChecked: new Date().toISOString() },
+          pollinations: { version: '2.1.0', lastChecked: new Date().toISOString() },
         }),
       });
 

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const NANOBANANA_API_BASE = 'https://api.nanobanana.io/v1';
+// Pollinations.ai is a free API that requires no authentication
+const POLLINATIONS_API_BASE = 'https://image.pollinations.ai';
 
 interface APIStatus {
   connected: boolean;
@@ -11,7 +12,7 @@ interface APIStatus {
 
 interface StatusResponse {
   gemini: APIStatus;
-  nanobanana: APIStatus;
+  pollinations: APIStatus;
 }
 
 async function checkGeminiStatus(): Promise<APIStatus> {
@@ -53,28 +54,26 @@ async function checkGeminiStatus(): Promise<APIStatus> {
   }
 }
 
-async function checkNanoBananaStatus(): Promise<APIStatus> {
-  const apiKey = process.env.NANO_BANANA_API_KEY;
-
-  if (!apiKey) {
-    return { connected: false, error: 'API key not configured' };
-  }
-
+async function checkPollinationsStatus(): Promise<APIStatus> {
+  // Pollinations.ai is a free, no-auth API - we just need to verify it's reachable
   const startTime = Date.now();
 
   try {
-    const response = await fetch(`${NANOBANANA_API_BASE}/version`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(10000), // 10 second timeout
-    });
+    // Make a minimal request to check if Pollinations is responding
+    // We use a small test prompt to verify the service is working
+    const testPrompt = encodeURIComponent('test');
+    const response = await fetch(
+      `${POLLINATIONS_API_BASE}/prompt/${testPrompt}?width=64&height=64&nologo=true`,
+      {
+        method: 'HEAD', // HEAD request to minimize data transfer
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      }
+    );
 
     const latency = Date.now() - startTime;
 
-    if (response.ok) {
+    // Pollinations returns 200 for valid requests
+    if (response.ok || response.status === 200) {
       return { connected: true, latency };
     }
 
@@ -96,14 +95,14 @@ async function checkNanoBananaStatus(): Promise<APIStatus> {
 export async function GET() {
   try {
     // Check both APIs in parallel for efficiency
-    const [geminiStatus, nanoBananaStatus] = await Promise.all([
+    const [geminiStatus, pollinationsStatus] = await Promise.all([
       checkGeminiStatus(),
-      checkNanoBananaStatus(),
+      checkPollinationsStatus(),
     ]);
 
     const response: StatusResponse = {
       gemini: geminiStatus,
-      nanobanana: nanoBananaStatus,
+      pollinations: pollinationsStatus,
     };
 
     return NextResponse.json(response);
@@ -112,7 +111,7 @@ export async function GET() {
     return NextResponse.json(
       {
         gemini: { connected: false, error: 'Health check failed' },
-        nanobanana: { connected: false, error: 'Health check failed' },
+        pollinations: { connected: false, error: 'Health check failed' },
       },
       { status: 500 }
     );
