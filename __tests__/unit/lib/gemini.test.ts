@@ -10,7 +10,8 @@ import {
 
 // Mock the webpage-fetcher module
 vi.mock('@/lib/webpage-fetcher', () => ({
-  fetchWebpageContent: vi.fn(),
+  fetchWebpageWithImages: vi.fn(),
+  fetchImageAsBase64: vi.fn(),
   WebpageFetchError: class WebpageFetchError extends Error {
     constructor(
       message: string,
@@ -22,7 +23,7 @@ vi.mock('@/lib/webpage-fetcher', () => ({
   },
 }));
 
-import { fetchWebpageContent } from '@/lib/webpage-fetcher';
+import { fetchWebpageWithImages, fetchImageAsBase64 } from '@/lib/webpage-fetcher';
 
 describe('GeminiClient', () => {
   const mockApiKey = 'test-api-key';
@@ -299,10 +300,15 @@ describe('GeminiClient', () => {
         featureTags: ['inventory', 'orders', 'analytics'],
         pricing: { type: 'freemium' },
         confidence: 0.85,
+        screenshots: [],
       };
 
-      // Mock webpage fetch
-      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+      // Mock webpage fetch with images
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
       // Mock Gemini API response
       global.fetch = vi.fn().mockResolvedValueOnce({
@@ -323,7 +329,7 @@ describe('GeminiClient', () => {
 
       const result = await client.analyzeUrl('https://example.com/app');
 
-      expect(fetchWebpageContent).toHaveBeenCalledWith('https://example.com/app', {
+      expect(fetchWebpageWithImages).toHaveBeenCalledWith('https://example.com/app', {
         maxLength: 12000,
       });
       expect(result.appName).toBe('MyApp Store Helper');
@@ -338,7 +344,7 @@ describe('GeminiClient', () => {
 
     it('should handle unreachable URLs', async () => {
       const { WebpageFetchError } = await import('@/lib/webpage-fetcher');
-      vi.mocked(fetchWebpageContent).mockRejectedValue(
+      vi.mocked(fetchWebpageWithImages).mockRejectedValue(
         new WebpageFetchError('Failed to fetch: ENOTFOUND', 0)
       );
 
@@ -351,7 +357,7 @@ describe('GeminiClient', () => {
     });
 
     it('should handle pages with insufficient content', async () => {
-      vi.mocked(fetchWebpageContent).mockResolvedValue('Short');
+      vi.mocked(fetchWebpageWithImages).mockResolvedValue({ text: 'Short', images: [] });
 
       await expect(client.analyzeUrl('https://example.com')).rejects.toThrow(GeminiError);
       await expect(client.analyzeUrl('https://example.com')).rejects.toThrow(
@@ -373,8 +379,12 @@ describe('GeminiClient', () => {
         confidence: 0.9,
       };
 
-      // Mock webpage fetch
-      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+      // Mock webpage fetch with images
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
       // Mock Gemini API response
       global.fetch = vi.fn().mockResolvedValueOnce({

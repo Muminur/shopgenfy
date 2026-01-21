@@ -119,6 +119,15 @@ export default function DashboardPage() {
   >([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Screenshots extracted from the landing page URL for Imagen feature image generation
+  const [extractedScreenshots, setExtractedScreenshots] = useState<
+    {
+      url: string;
+      base64?: string;
+      mimeType?: string;
+      alt?: string;
+    }[]
+  >([]);
 
   // Preview sync hook for real-time preview synchronization
   const { saveToPreview, lastSynced } = usePreviewSync({ debounceMs: 500 });
@@ -172,7 +181,16 @@ export default function DashboardPage() {
         primaryCategory: data.primaryCategory || prev.primaryCategory,
       }));
 
-      setSuccess('Landing page analyzed successfully!');
+      // Store extracted screenshots for later use with Imagen
+      if (data.screenshots && data.screenshots.length > 0) {
+        setExtractedScreenshots(data.screenshots);
+        setSuccess(
+          `Landing page analyzed! Found ${data.screenshots.length} screenshot(s) for feature image generation.`
+        );
+      } else {
+        setExtractedScreenshots([]);
+        setSuccess('Landing page analyzed successfully!');
+      }
     } catch {
       setError('Failed to analyze landing page. Please try again.');
     } finally {
@@ -316,7 +334,17 @@ export default function DashboardPage() {
         throw new Error('Please add at least one feature to generate images');
       }
 
+      // Prepare screenshots for the API (only include base64-loaded ones)
+      const screenshotsForApi = extractedScreenshots
+        .filter((s) => s.base64 && s.mimeType)
+        .map((s) => ({
+          base64: s.base64!,
+          mimeType: s.mimeType!,
+          alt: s.alt,
+        }));
+
       // Use the Imagen API to generate all images
+      // If screenshots are available, they will be used for feature image generation
       const response = await fetch('/api/imagen/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -325,6 +353,7 @@ export default function DashboardPage() {
           appName: formData.appName || 'My App',
           appDescription: formData.appDescription || formData.appIntroduction,
           features,
+          screenshots: screenshotsForApi.length > 0 ? screenshotsForApi : undefined,
         }),
       });
 
@@ -354,9 +383,18 @@ export default function DashboardPage() {
           })
         );
         setImages(generatedImages);
-        setSuccess(
-          `Generated ${generatedImages.length} image(s) with Google Imagen! (App Icon: 1200x1200, Features: 1600x900)`
-        );
+
+        // Show different success message based on whether screenshots were used
+        const usedScreenshots = data.usedScreenshots || 0;
+        if (usedScreenshots > 0) {
+          setSuccess(
+            `Generated ${generatedImages.length} image(s) with Google Imagen using ${usedScreenshots} extracted screenshot(s)! (App Icon: 1200x1200, Features: 1600x900)`
+          );
+        } else {
+          setSuccess(
+            `Generated ${generatedImages.length} image(s) with Google Imagen! (App Icon: 1200x1200, Features: 1600x900)`
+          );
+        }
       } else {
         throw new Error('No images were generated');
       }
@@ -366,7 +404,13 @@ export default function DashboardPage() {
     } finally {
       setIsGeneratingWithImagen(false);
     }
-  }, [formData.appName, formData.appIntroduction, formData.appDescription, formData.features]);
+  }, [
+    formData.appName,
+    formData.appIntroduction,
+    formData.appDescription,
+    formData.features,
+    extractedScreenshots,
+  ]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);

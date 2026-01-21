@@ -65,6 +65,7 @@ describe('API Version Manager - Integration Tests', () => {
         featureTags: ['test'],
         pricing: { type: 'free' as const },
         confidence: 0.9,
+        screenshots: [],
       }),
     };
 

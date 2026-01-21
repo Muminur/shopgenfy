@@ -25,6 +25,19 @@ export interface ImagenGenerateOptions {
   negativePrompt?: string;
 }
 
+export interface ReferenceScreenshot {
+  base64: string;
+  mimeType: string;
+  alt?: string;
+}
+
+export interface ImagenGenerateWithScreenshotsOptions {
+  appName: string;
+  featureText: string;
+  description?: string;
+  screenshots: ReferenceScreenshot[];
+}
+
 export interface ImagenGeneratedImage {
   id: string;
   url: string;
@@ -62,10 +75,14 @@ export interface ImagenClient {
     featureText: string,
     description?: string
   ): Promise<ImagenGeneratedImage>;
+  generateFeatureImageWithScreenshots(
+    options: ImagenGenerateWithScreenshotsOptions
+  ): Promise<ImagenGeneratedImage>;
   generateAllImages(
     appName: string,
     appDescription: string,
-    features: string[]
+    features: string[],
+    screenshots?: ReferenceScreenshot[]
   ): Promise<ImagenGeneratedImage[]>;
 }
 
@@ -228,19 +245,164 @@ export function createImagenClient(apiKey: string): ImagenClient {
     return image;
   }
 
+  /**
+   * Generate feature image using actual screenshots from the user's app as reference.
+   * Uses Gemini's multimodal image generation (gemini-2.5-flash-image) to create
+   * a Shopify App Store compliant feature image that incorporates the real app screenshots.
+   */
+  async function generateFeatureImageWithScreenshots(
+    options: ImagenGenerateWithScreenshotsOptions
+  ): Promise<ImagenGeneratedImage> {
+    const { appName, featureText, description, screenshots } = options;
+
+    if (!screenshots || screenshots.length === 0) {
+      // Fall back to regular generation if no screenshots provided
+      return generateFeatureImage(appName, featureText, description);
+    }
+
+    const sanitizedName = sanitizeForPrompt(appName);
+    const sanitizedFeature = sanitizeForPrompt(featureText);
+    const sanitizedDesc = description ? sanitizeForPrompt(description) : '';
+
+    // Build the prompt for Gemini multimodal image generation
+    const textPrompt = [
+      `Create a professional Shopify App Store feature image for "${sanitizedName}" app.`,
+      `Feature to highlight: "${sanitizedFeature}"`,
+      sanitizedDesc ? `App description: ${sanitizedDesc.slice(0, 150)}` : '',
+      '',
+      'IMPORTANT INSTRUCTIONS:',
+      '- Use the provided screenshot(s) as the main visual content',
+      '- Create a polished, professional app store listing image',
+      '- Add subtle design elements like gradient backgrounds, device frames, or decorative elements',
+      '- Ensure the screenshot is clearly visible and is the focal point',
+      '- Add professional overlay text highlighting the feature (use clean sans-serif font)',
+      '- Output dimensions should be 16:9 widescreen format (1600x900)',
+      '- Use high contrast colors for good visibility',
+      '- NO Shopify logos or branding',
+      '- NO browser chrome or URL bars',
+      '- Keep ~100px safe zone from edges',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    try {
+      // Build multimodal content with screenshots and text
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contentParts: any[] = [];
+
+      // Add screenshots as inline images (max 3 for best results)
+      const screenshotsToUse = screenshots.slice(0, 3);
+      for (const screenshot of screenshotsToUse) {
+        contentParts.push({
+          inlineData: {
+            mimeType: screenshot.mimeType,
+            data: screenshot.base64,
+          },
+        });
+      }
+
+      // Add the text prompt
+      contentParts.push({ text: textPrompt });
+
+      // Use Gemini's multimodal image generation
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: contentParts,
+        config: {
+          responseModalities: ['TEXT', 'IMAGE'],
+        },
+      });
+
+      // Extract the generated image from response
+      const candidates = response.candidates;
+      if (!candidates || candidates.length === 0) {
+        throw new ImagenError('No response generated from Gemini');
+      }
+
+      const parts = candidates[0].content?.parts;
+      if (!parts) {
+        throw new ImagenError('No content parts in response');
+      }
+
+      // Find the image part in the response
+      let imageBase64: string | undefined;
+      let imageMimeType = 'image/png';
+
+      for (const part of parts) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const partAny = part as any;
+        if (partAny.inlineData?.data) {
+          imageBase64 = partAny.inlineData.data;
+          imageMimeType = partAny.inlineData.mimeType || 'image/png';
+          break;
+        }
+      }
+
+      if (!imageBase64) {
+        // If Gemini didn't return an image, fall back to regular Imagen generation
+        console.warn('Gemini did not return an image, falling back to Imagen');
+        return generateFeatureImage(appName, featureText, description);
+      }
+
+      const spec = SHOPIFY_IMAGE_SPECS.featureImage;
+
+      return {
+        id: `gemini-feature-${Date.now()}-0`,
+        url: `data:${imageMimeType};base64,${imageBase64}`,
+        base64Data: imageBase64,
+        mimeType: imageMimeType,
+        width: spec.width,
+        height: spec.height,
+        type: 'feature',
+        prompt: textPrompt,
+        altText: generateAltText('feature', appName, featureText),
+      };
+    } catch (error) {
+      if (error instanceof ImagenError) {
+        throw error;
+      }
+      // Log the error and fall back to regular generation
+      console.error('Gemini multimodal generation failed, falling back to Imagen:', error);
+      return generateFeatureImage(appName, featureText, description);
+    }
+  }
+
   async function generateAllImages(
     appName: string,
     appDescription: string,
-    features: string[]
+    features: string[],
+    screenshots?: ReferenceScreenshot[]
   ): Promise<ImagenGeneratedImage[]> {
-    // Generate app icon first
+    // Generate app icon first (always uses Imagen, no screenshots needed)
     const icon = await generateAppIcon(appName, appDescription);
 
     // Generate feature images in parallel (max 3 to match Shopify recommendations)
     const featuresToGenerate = features.filter((f) => f.trim()).slice(0, 3);
-    const featureImagePromises = featuresToGenerate.map((feature) =>
-      generateFeatureImage(appName, feature, appDescription)
-    );
+
+    // If screenshots are provided, use multimodal generation
+    // Otherwise, fall back to regular Imagen generation
+    const hasScreenshots = screenshots && screenshots.length > 0;
+
+    const featureImagePromises = featuresToGenerate.map((feature, index) => {
+      if (hasScreenshots) {
+        // Rotate through screenshots for different features
+        const screenshotIndex = index % screenshots.length;
+        const screenshotsForFeature = [
+          screenshots[screenshotIndex],
+          // Include additional screenshots for context if available
+          ...screenshots.filter((_, i) => i !== screenshotIndex).slice(0, 2),
+        ];
+
+        return generateFeatureImageWithScreenshots({
+          appName,
+          featureText: feature,
+          description: appDescription,
+          screenshots: screenshotsForFeature,
+        });
+      }
+      return generateFeatureImage(appName, feature, appDescription);
+    });
+
     const featureImages = await Promise.all(featureImagePromises);
 
     return [icon, ...featureImages];
@@ -250,6 +412,7 @@ export function createImagenClient(apiKey: string): ImagenClient {
     generateImages,
     generateAppIcon,
     generateFeatureImage,
+    generateFeatureImageWithScreenshots,
     generateAllImages,
   };
 }

@@ -1,5 +1,10 @@
 import { SHOPIFY_LIMITS } from './validators/constants';
-import { fetchWebpageContent, WebpageFetchError } from './webpage-fetcher';
+import {
+  fetchWebpageWithImages,
+  WebpageFetchError,
+  ExtractedImage,
+  fetchImageAsBase64,
+} from './webpage-fetcher';
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-2.0-flash';
@@ -39,6 +44,15 @@ export interface GeminiStreamChunk {
   finishReason?: string;
 }
 
+export interface ExtractedScreenshot {
+  url: string;
+  base64?: string;
+  mimeType?: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface GeminiAnalysisResult {
   appName: string;
   appIntroduction: string;
@@ -54,6 +68,7 @@ export interface GeminiAnalysisResult {
     billingCycle?: 'monthly' | 'yearly' | 'one-time';
   };
   confidence: number;
+  screenshots: ExtractedScreenshot[];
 }
 
 export class GeminiError extends Error {
@@ -297,10 +312,13 @@ export function createGeminiClient(apiKey: string): GeminiClient {
       throw new GeminiError('Invalid URL format');
     }
 
-    // Fetch the webpage content first
+    // Fetch the webpage content AND images
     let pageContent: string;
+    let extractedImages: ExtractedImage[] = [];
     try {
-      pageContent = await fetchWebpageContent(url, { maxLength: 12000 });
+      const result = await fetchWebpageWithImages(url, { maxLength: 12000 });
+      pageContent = result.text;
+      extractedImages = result.images;
     } catch (error) {
       if (error instanceof WebpageFetchError) {
         throw new GeminiError(`Failed to fetch page: ${error.message}`, error.statusCode);
@@ -345,7 +363,7 @@ Return ONLY the JSON object, no other text.`;
       maxOutputTokens: 4096,
     });
 
-    let analysis: GeminiAnalysisResult;
+    let analysis: Omit<GeminiAnalysisResult, 'screenshots'>;
     try {
       const jsonMatch = result.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -355,6 +373,24 @@ Return ONLY the JSON object, no other text.`;
     } catch {
       throw new GeminiError('Failed to parse analysis response');
     }
+
+    // Fetch the top screenshots as base64 (max 5 to limit bandwidth)
+    const screenshotsToFetch = extractedImages.slice(0, 5);
+    const screenshotPromises = screenshotsToFetch.map(async (img): Promise<ExtractedScreenshot> => {
+      const base64Data = await fetchImageAsBase64(img.url);
+      return {
+        url: img.url,
+        base64: base64Data?.base64,
+        mimeType: base64Data?.mimeType,
+        alt: img.alt,
+        width: img.width,
+        height: img.height,
+      };
+    });
+
+    const screenshots = await Promise.all(screenshotPromises);
+    // Filter to only include screenshots that were successfully fetched
+    const validScreenshots = screenshots.filter((s) => s.base64 && s.mimeType);
 
     return {
       appName: truncateToLimit(analysis.appName || '', SHOPIFY_LIMITS.APP_NAME_MAX),
@@ -374,6 +410,7 @@ Return ONLY the JSON object, no other text.`;
       featureTags: (analysis.featureTags || []).slice(0, SHOPIFY_LIMITS.FEATURE_TAGS_MAX_ITEMS),
       pricing: analysis.pricing || { type: 'free' },
       confidence: Math.min(1, Math.max(0, analysis.confidence || 0)),
+      screenshots: validScreenshots,
     };
   }
 

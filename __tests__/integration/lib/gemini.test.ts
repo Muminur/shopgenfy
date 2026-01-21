@@ -3,7 +3,8 @@ import { createGeminiClient, GeminiError, type GeminiClient } from '@/lib/gemini
 
 // Mock the webpage-fetcher module
 vi.mock('@/lib/webpage-fetcher', () => ({
-  fetchWebpageContent: vi.fn(),
+  fetchWebpageWithImages: vi.fn(),
+  fetchImageAsBase64: vi.fn(),
   WebpageFetchError: class WebpageFetchError extends Error {
     constructor(
       message: string,
@@ -15,7 +16,7 @@ vi.mock('@/lib/webpage-fetcher', () => ({
   },
 }));
 
-import { fetchWebpageContent } from '@/lib/webpage-fetcher';
+import { fetchWebpageWithImages, fetchImageAsBase64 } from '@/lib/webpage-fetcher';
 
 /**
  * Integration tests for Gemini API client
@@ -267,7 +268,7 @@ describe('Gemini API Client - Integration Tests', () => {
         topK: 20,
       });
 
-      const fetchCall = (global.fetch as any).mock.calls[0];
+      const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
       const requestBody = JSON.parse(fetchCall[1].body);
 
       expect(requestBody.generationConfig.temperature).toBe(0.5);
@@ -385,7 +386,11 @@ describe('Gemini API Client - Integration Tests', () => {
     `;
 
     it('should analyze URL and return structured data with truncation', async () => {
-      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
       const mockResponse = {
         candidates: [
@@ -424,7 +429,9 @@ describe('Gemini API Client - Integration Tests', () => {
 
       const result = await client.analyzeUrl('https://example.com');
 
-      expect(fetchWebpageContent).toHaveBeenCalledWith('https://example.com', { maxLength: 12000 });
+      expect(fetchWebpageWithImages).toHaveBeenCalledWith('https://example.com', {
+        maxLength: 12000,
+      });
       expect(result.appName.length).toBeLessThanOrEqual(30);
       expect(result.appIntroduction).toBe('A great app for Shopify merchants');
       expect(result.featureList).toHaveLength(3);
@@ -437,7 +444,11 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should handle malformed JSON response from API', async () => {
-      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
       const mockResponse = {
         candidates: [
@@ -461,7 +472,11 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should handle partial data with defaults', async () => {
-      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
       const mockResponse = {
         candidates: [
@@ -496,7 +511,11 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should truncate feature list items exceeding character limit', async () => {
-      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
       const longFeature = 'A'.repeat(100);
       const mockResponse = {
@@ -531,7 +550,11 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should limit feature tags to maximum allowed', async () => {
-      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
       const manyTags = Array.from({ length: 30 }, (_, i) => `tag${i}`);
       const mockResponse = {
@@ -571,7 +594,11 @@ describe('Gemini API Client - Integration Tests', () => {
       ];
 
       for (const { input, expected } of testCases) {
-        vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+        vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+          text: mockPageContent,
+          images: [],
+        });
+        vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
         const mockResponse = {
           candidates: [
@@ -602,7 +629,11 @@ describe('Gemini API Client - Integration Tests', () => {
     });
 
     it('should use lower temperature for analysis calls', async () => {
-      vi.mocked(fetchWebpageContent).mockResolvedValueOnce(mockPageContent);
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
 
       const mockResponse = {
         candidates: [
@@ -629,7 +660,7 @@ describe('Gemini API Client - Integration Tests', () => {
 
       await client.analyzeUrl('https://example.com');
 
-      const fetchCall = (global.fetch as any).mock.calls[0];
+      const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
       const requestBody = JSON.parse(fetchCall[1].body);
 
       expect(requestBody.generationConfig.temperature).toBe(0.3);

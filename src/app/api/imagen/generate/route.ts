@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createImagenClient, ImagenError, SHOPIFY_IMAGE_SPECS } from '@/lib/imagen';
+import {
+  createImagenClient,
+  ImagenError,
+  SHOPIFY_IMAGE_SPECS,
+  ReferenceScreenshot,
+} from '@/lib/imagen';
 
 export const maxDuration = 60; // Allow up to 60 seconds for image generation
 
@@ -9,6 +14,7 @@ interface GenerateRequest {
   appDescription?: string;
   features?: string[];
   featureText?: string;
+  screenshots?: ReferenceScreenshot[];
 }
 
 export async function POST(request: NextRequest) {
@@ -87,10 +93,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Pass screenshots if provided for multimodal generation
       const images = await client.generateAllImages(
         body.appName,
         body.appDescription || '',
-        features
+        features,
+        body.screenshots
       );
 
       return NextResponse.json({
@@ -105,6 +113,7 @@ export async function POST(request: NextRequest) {
           mimeType: img.mimeType,
         })),
         count: images.length,
+        usedScreenshots: body.screenshots ? body.screenshots.length : 0,
         specs: {
           icon: SHOPIFY_IMAGE_SPECS.appIcon,
           feature: SHOPIFY_IMAGE_SPECS.featureImage,
