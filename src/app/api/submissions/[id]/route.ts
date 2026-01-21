@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
+import { getDatabaseConnected } from '@/lib/mongodb';
 import { getSubmissionById, updateSubmission, deleteSubmission } from '@/lib/db/submissions';
 import { updateSubmissionSchema } from '@/lib/validators/submission';
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
   try {
-    const db = await getDatabase();
+    const db = await getDatabaseConnected();
     const submission = await getSubmissionById(db, id);
 
     if (!submission) {
@@ -64,7 +64,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    const db = await getDatabase();
+    const db = await getDatabaseConnected();
 
     // Check if submission exists and belongs to user
     const existing = await getSubmissionById(db, id);
@@ -104,7 +104,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
   try {
-    const db = await getDatabase();
+    const db = await getDatabaseConnected();
 
     // Check if submission exists and belongs to user
     const existing = await getSubmissionById(db, id);

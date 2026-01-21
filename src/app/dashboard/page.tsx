@@ -49,10 +49,22 @@ import {
   Languages,
   Tag,
   Eye,
+  Wand2,
 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, SHOPIFY_INTEGRATIONS } from '@/lib/validators/constants';
 import { PricingConfig } from '@/types';
 import { usePreviewSync, PreviewFormData } from '@/hooks/usePreviewSync';
+
+// Helper to sanitize text for image prompts - removes Shopify branding and URLs
+function sanitizeForPrompt(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\bshopify\b/gi, '') // Remove Shopify branding (case insensitive)
+    .replace(/https?:\/\/[^\s]+/gi, '') // Remove URLs
+    .replace(/www\.[^\s]+/gi, '') // Remove www URLs
+    .replace(/\s+/g, ' ') // Clean up multiple spaces
+    .trim();
+}
 
 interface FormData {
   landingPageUrl: string;
@@ -93,6 +105,7 @@ export default function DashboardPage() {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [isGeneratingWithImagen, setIsGeneratingWithImagen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [images, setImages] = useState<
     {
@@ -175,13 +188,39 @@ export default function DashboardPage() {
       const generatedImages: typeof images = [];
       const features = formData.features.filter((f) => f.trim());
 
-      // Generate app icon first
+      // Sanitize all content to remove Shopify branding before using in prompts
+      const sanitizedAppName = sanitizeForPrompt(formData.appName);
+      const sanitizedDescription = sanitizeForPrompt(formData.appDescription);
+      const sanitizedIntro = sanitizeForPrompt(formData.appIntroduction);
+      const sanitizedCategory = sanitizeForPrompt(formData.primaryCategory);
+
+      // Build rich context from extracted URL content (sanitized)
+      const appContext = [
+        sanitizedDescription,
+        sanitizedIntro,
+        sanitizedCategory ? `Category: ${sanitizedCategory}` : '',
+      ]
+        .filter(Boolean)
+        .join('. ');
+
+      // Generate app icon first with rich context
+      const iconPrompt = [
+        `Professional app icon for "${sanitizedAppName}"`,
+        sanitizedCategory ? `a ${sanitizedCategory} application` : '',
+        appContext ? `Context: ${appContext.slice(0, 150)}` : '',
+        'Style: modern, flat design, minimalist, simple geometric shapes',
+        'high contrast, vibrant colors, single focal point, centered composition',
+        'suitable for app store listing',
+      ]
+        .filter(Boolean)
+        .join('. ');
+
       const iconResponse = await fetch('/api/nanobanana/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'icon',
-          prompt: `Professional app icon for ${formData.appName}: ${formData.appIntroduction || 'A modern application'}`,
+          prompt: iconPrompt,
           style: 'modern',
         }),
       });
@@ -203,12 +242,28 @@ export default function DashboardPage() {
       // Generate feature images for each feature (max 3 to avoid rate limits)
       const featuresToGenerate = features.slice(0, 3);
       for (const feature of featuresToGenerate) {
+        // Sanitize feature text
+        const sanitizedFeature = sanitizeForPrompt(feature);
+
+        // Build rich feature prompt using extracted content (sanitized)
+        const featurePrompt = [
+          `Feature showcase image for "${sanitizedAppName}" app`,
+          `Highlighting: "${sanitizedFeature}"`,
+          sanitizedCategory ? `Category: ${sanitizedCategory}` : '',
+          sanitizedDescription ? `App description: ${sanitizedDescription.slice(0, 100)}` : '',
+          'Style: modern UI mockup, clean interface design, professional dashboard visualization',
+          'high contrast, clear visual hierarchy, 16:9 aspect ratio',
+          'suitable for app store feature gallery',
+        ]
+          .filter(Boolean)
+          .join('. ');
+
         const featureResponse = await fetch('/api/nanobanana/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'feature',
-            prompt: `Feature showcase for ${formData.appName}: ${feature}`,
+            prompt: featurePrompt,
             featureHighlight: feature,
             style: 'modern',
           }),
@@ -237,11 +292,81 @@ export default function DashboardPage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to generate images';
-      setError(`${message}. Please check your NANO_BANANA_API_KEY in .env.local`);
+      setError(`${message}. Please try again or check your network connection.`);
     } finally {
       setIsGeneratingImages(false);
     }
-  }, [formData.appName, formData.appIntroduction, formData.features]);
+  }, [
+    formData.appName,
+    formData.appIntroduction,
+    formData.appDescription,
+    formData.primaryCategory,
+    formData.features,
+  ]);
+
+  // Handler for generating images with Google Imagen API
+  const handleGenerateWithImagen = useCallback(async () => {
+    setIsGeneratingWithImagen(true);
+    setError(null);
+
+    try {
+      const features = formData.features.filter((f) => f.trim());
+
+      if (features.length === 0) {
+        throw new Error('Please add at least one feature to generate images');
+      }
+
+      // Use the Imagen API to generate all images
+      const response = await fetch('/api/imagen/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'all',
+          appName: formData.appName || 'My App',
+          appDescription: formData.appDescription || formData.appIntroduction,
+          features,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to generate images (${response.status})`);
+      }
+
+      const data = await response.json();
+
+      if (data.images && data.images.length > 0) {
+        const generatedImages = data.images.map(
+          (img: {
+            id: string;
+            url: string;
+            type: 'icon' | 'feature';
+            width: number;
+            height: number;
+            altText: string;
+          }) => ({
+            id: img.id,
+            url: img.url,
+            type: img.type,
+            width: img.width,
+            height: img.height,
+            alt: img.altText,
+          })
+        );
+        setImages(generatedImages);
+        setSuccess(
+          `Generated ${generatedImages.length} image(s) with Google Imagen! (App Icon: 1200x1200, Features: 1600x900)`
+        );
+      } else {
+        throw new Error('No images were generated');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to generate images with Imagen';
+      setError(`${message}. Please try again.`);
+    } finally {
+      setIsGeneratingWithImagen(false);
+    }
+  }, [formData.appName, formData.appIntroduction, formData.appDescription, formData.features]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -276,13 +401,219 @@ export default function DashboardPage() {
   }, [formData]);
 
   const handleExport = useCallback(async () => {
-    // Export functionality - to be implemented with export API
-    setSuccess('Export feature coming soon!');
-  }, []);
+    if (images.length === 0) {
+      setError('No images to export. Generate images first.');
+      return;
+    }
 
-  const handleRegenerateImage = useCallback(async (_id: string) => {
-    // Regenerate specific image - to be implemented
-  }, []);
+    setError(null);
+
+    try {
+      // Create metadata JSON
+      const metadata = {
+        exportedAt: new Date().toISOString(),
+        version: '1.0.0',
+        submission: {
+          appName: formData.appName,
+          appIntroduction: formData.appIntroduction,
+          appDescription: formData.appDescription,
+          features: formData.features.filter((f) => f.trim()),
+          languages: formData.languages,
+          primaryCategory: formData.primaryCategory,
+          secondaryCategory: formData.secondaryCategory,
+          pricing: formData.pricing,
+          landingPageUrl: formData.landingPageUrl,
+        },
+        images: images.map((img) => ({
+          id: img.id,
+          type: img.type,
+          width: img.width,
+          height: img.height,
+          url: img.url,
+          alt: img.alt,
+        })),
+        shopifyCompliance: {
+          appNameLength: `${formData.appName.length}/30`,
+          appIntroLength: `${formData.appIntroduction.length}/100`,
+          appDescriptionLength: `${formData.appDescription.length}/500`,
+          iconDimensions: '1200x1200',
+          featureImageDimensions: '1600x900',
+        },
+      };
+
+      // Download metadata JSON
+      const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], {
+        type: 'application/json',
+      });
+      const metadataUrl = URL.createObjectURL(metadataBlob);
+      const metadataLink = document.createElement('a');
+      metadataLink.href = metadataUrl;
+      metadataLink.download = `${formData.appName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-metadata.json`;
+      document.body.appendChild(metadataLink);
+      metadataLink.click();
+      document.body.removeChild(metadataLink);
+      URL.revokeObjectURL(metadataUrl);
+
+      // Download each image through proxy to avoid CORS issues
+      for (const image of images) {
+        try {
+          const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(image.url)}`;
+          const imgResponse = await fetch(proxyUrl);
+          if (imgResponse.ok) {
+            const imgBlob = await imgResponse.blob();
+            const imgUrl = URL.createObjectURL(imgBlob);
+            const imgLink = document.createElement('a');
+            imgLink.href = imgUrl;
+            const filename =
+              image.type === 'icon'
+                ? `${formData.appName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-icon.png`
+                : `${formData.appName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-feature-${image.id.slice(-6)}.png`;
+            imgLink.download = filename;
+            document.body.appendChild(imgLink);
+            imgLink.click();
+            document.body.removeChild(imgLink);
+            URL.revokeObjectURL(imgUrl);
+          }
+        } catch (imgError) {
+          console.warn(`Failed to download image ${image.id}:`, imgError);
+        }
+      }
+
+      setSuccess(`Exported ${images.length} image(s) and metadata successfully!`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to export package';
+      setError(`${message}. Please try again.`);
+    }
+  }, [formData, images]);
+
+  const handleRegenerateImage = useCallback(
+    async (id: string) => {
+      // Find the image to regenerate
+      const imageToRegenerate = images.find((img) => img.id === id);
+      if (!imageToRegenerate) {
+        setError('Image not found');
+        return;
+      }
+
+      setIsGeneratingImages(true);
+      setError(null);
+
+      try {
+        // Sanitize content for prompts
+        const sanitizedAppName = sanitizeForPrompt(formData.appName);
+        const sanitizedDescription = sanitizeForPrompt(formData.appDescription);
+        const sanitizedIntro = sanitizeForPrompt(formData.appIntroduction);
+        const sanitizedCategory = sanitizeForPrompt(formData.primaryCategory);
+
+        let prompt: string;
+        let requestBody: {
+          type: 'icon' | 'feature';
+          prompt: string;
+          style: string;
+          featureHighlight?: string;
+        };
+
+        if (imageToRegenerate.type === 'icon') {
+          // Build rich context for icon
+          const appContext = [
+            sanitizedDescription,
+            sanitizedIntro,
+            sanitizedCategory ? `Category: ${sanitizedCategory}` : '',
+          ]
+            .filter(Boolean)
+            .join('. ');
+
+          prompt = [
+            `Professional app icon for "${sanitizedAppName}"`,
+            sanitizedCategory ? `a ${sanitizedCategory} application` : '',
+            appContext ? `Context: ${appContext.slice(0, 150)}` : '',
+            'Style: modern, flat design, minimalist, simple geometric shapes',
+            'high contrast, vibrant colors, single focal point, centered composition',
+            'suitable for app store listing',
+          ]
+            .filter(Boolean)
+            .join('. ');
+
+          requestBody = {
+            type: 'icon',
+            prompt,
+            style: 'modern',
+          };
+        } else {
+          // For feature images, try to find the original feature text from the alt text
+          // Alt format is usually "${appName} - ${feature}"
+          const altParts = imageToRegenerate.alt.split(' - ');
+          const featureText =
+            altParts.length > 1 ? altParts.slice(1).join(' - ') : formData.features[0] || '';
+          const sanitizedFeature = sanitizeForPrompt(featureText);
+
+          prompt = [
+            `Feature showcase image for "${sanitizedAppName}" app`,
+            `Highlighting: "${sanitizedFeature}"`,
+            sanitizedCategory ? `Category: ${sanitizedCategory}` : '',
+            sanitizedDescription ? `App description: ${sanitizedDescription.slice(0, 100)}` : '',
+            'Style: modern UI mockup, clean interface design, professional dashboard visualization',
+            'high contrast, clear visual hierarchy, 16:9 aspect ratio',
+            'suitable for app store feature gallery',
+          ]
+            .filter(Boolean)
+            .join('. ');
+
+          requestBody = {
+            type: 'feature',
+            prompt,
+            featureHighlight: featureText,
+            style: 'modern',
+          };
+        }
+
+        const response = await fetch('/api/nanobanana/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to regenerate image (${response.status})`);
+        }
+
+        const data = await response.json();
+        if (data.image) {
+          // Update the specific image in state
+          setImages((prevImages) =>
+            prevImages.map((img) =>
+              img.id === id
+                ? {
+                    ...img,
+                    id: data.image.id || `${img.type}-${Date.now()}`,
+                    url: data.image.url,
+                    width: data.image.width || img.width,
+                    height: data.image.height || img.height,
+                  }
+                : img
+            )
+          );
+          setSuccess('Image regenerated successfully!');
+        } else {
+          throw new Error('No image was returned');
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to regenerate image';
+        setError(`${message}. Please try again.`);
+      } finally {
+        setIsGeneratingImages(false);
+      }
+    },
+    [
+      images,
+      formData.appName,
+      formData.appDescription,
+      formData.appIntroduction,
+      formData.primaryCategory,
+      formData.features,
+    ]
+  );
 
   const handleDownloadImage = useCallback(
     (id: string) => {
@@ -703,6 +1034,26 @@ export default function DashboardPage() {
                     <>
                       <ImageIcon className="h-4 w-4 mr-2" />
                       Generate Images
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  onClick={handleGenerateWithImagen}
+                  disabled={isGeneratingWithImagen || !formData.appName}
+                  variant="secondary"
+                  className="w-full"
+                  data-testid="generate-imagen-button"
+                >
+                  {isGeneratingWithImagen ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generating with Imagen...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      Generate with Imagen
                     </>
                   )}
                 </Button>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '@/lib/mongodb';
+import { getDatabaseConnected } from '@/lib/mongodb';
 import { createSubmission, getSubmissionsByUserId } from '@/lib/db/submissions';
 import { createSubmissionSchema } from '@/lib/validators/submission';
 import { ZodError } from 'zod';
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const db = await getDatabase();
+    const db = await getDatabaseConnected();
 
     // Parse and validate pagination params
     const searchParams = request.nextUrl.searchParams;
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const db = await getDatabase();
+    const db = await getDatabaseConnected();
     const submission = await createSubmission(db, userId, parseResult.data);
 
     return NextResponse.json(submission, { status: 201 });
