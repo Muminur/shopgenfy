@@ -5,6 +5,7 @@ import { ObjectId } from 'mongodb';
 // Mock MongoDB connection
 vi.mock('@/lib/mongodb', () => ({
   getDatabase: vi.fn(),
+  getDatabaseConnected: vi.fn(),
 }));
 
 // Mock submissions database operations
@@ -62,8 +63,8 @@ describe('Bug Fix: Dashboard Save Draft', () => {
       const { createSubmission } = await import('@/lib/db/submissions');
       (createSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(mockCreated);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { POST } = await import('@/app/api/submissions/route');
       const request = new NextRequest('http://localhost/api/submissions', {
@@ -118,8 +119,8 @@ describe('Bug Fix: Dashboard Save Draft', () => {
       const { createSubmission } = await import('@/lib/db/submissions');
       (createSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(mockCreated);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { POST } = await import('@/app/api/submissions/route');
       const request = new NextRequest('http://localhost/api/submissions', {
@@ -172,8 +173,8 @@ describe('Bug Fix: Dashboard Save Draft', () => {
       const { createSubmission } = await import('@/lib/db/submissions');
       (createSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(mockCreated);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { POST } = await import('@/app/api/submissions/route');
       const request = new NextRequest('http://localhost/api/submissions', {
