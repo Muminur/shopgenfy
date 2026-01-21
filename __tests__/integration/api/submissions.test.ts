@@ -5,6 +5,7 @@ import { ObjectId } from 'mongodb';
 // Mock MongoDB connection
 vi.mock('@/lib/mongodb', () => ({
   getDatabase: vi.fn(),
+  getDatabaseConnected: vi.fn(),
 }));
 
 // Mock submissions database operations
@@ -60,8 +61,8 @@ describe('Submissions API Routes', () => {
         total: 1,
       });
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { GET } = await import('@/app/api/submissions/route');
       const request = new NextRequest('http://localhost/api/submissions', {
@@ -83,8 +84,8 @@ describe('Submissions API Routes', () => {
         total: 0,
       });
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { GET } = await import('@/app/api/submissions/route');
       const request = new NextRequest('http://localhost/api/submissions?page=2&limit=10', {
@@ -124,8 +125,8 @@ describe('Submissions API Routes', () => {
       const { createSubmission } = await import('@/lib/db/submissions');
       (createSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(mockCreated);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { POST } = await import('@/app/api/submissions/route');
       const request = new NextRequest('http://localhost/api/submissions', {
@@ -146,8 +147,8 @@ describe('Submissions API Routes', () => {
     });
 
     it('should return 400 for invalid submission data', async () => {
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { POST } = await import('@/app/api/submissions/route');
       const request = new NextRequest('http://localhost/api/submissions', {
@@ -192,8 +193,8 @@ describe('Submissions API Routes', () => {
       const { getSubmissionById } = await import('@/lib/db/submissions');
       (getSubmissionById as ReturnType<typeof vi.fn>).mockResolvedValue(mockSubmission);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { GET } = await import('@/app/api/submissions/[id]/route');
       const request = new NextRequest(`http://localhost/api/submissions/${mockSubmissionId}`, {
@@ -211,8 +212,8 @@ describe('Submissions API Routes', () => {
       const { getSubmissionById } = await import('@/lib/db/submissions');
       (getSubmissionById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { GET } = await import('@/app/api/submissions/[id]/route');
       const request = new NextRequest(`http://localhost/api/submissions/${mockSubmissionId}`, {
@@ -237,8 +238,8 @@ describe('Submissions API Routes', () => {
       const { getSubmissionById } = await import('@/lib/db/submissions');
       (getSubmissionById as ReturnType<typeof vi.fn>).mockResolvedValue(mockSubmission);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { GET } = await import('@/app/api/submissions/[id]/route');
       const request = new NextRequest(`http://localhost/api/submissions/${mockSubmissionId}`, {
@@ -272,8 +273,8 @@ describe('Submissions API Routes', () => {
       (getSubmissionById as ReturnType<typeof vi.fn>).mockResolvedValue(mockSubmission);
       (updateSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(mockUpdated);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { PUT } = await import('@/app/api/submissions/[id]/route');
       const request = new NextRequest(`http://localhost/api/submissions/${mockSubmissionId}`, {
@@ -296,8 +297,8 @@ describe('Submissions API Routes', () => {
       const { getSubmissionById } = await import('@/lib/db/submissions');
       (getSubmissionById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { PUT } = await import('@/app/api/submissions/[id]/route');
       const request = new NextRequest(`http://localhost/api/submissions/${mockSubmissionId}`, {
@@ -330,8 +331,8 @@ describe('Submissions API Routes', () => {
       (getSubmissionById as ReturnType<typeof vi.fn>).mockResolvedValue(mockSubmission);
       (deleteSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { DELETE } = await import('@/app/api/submissions/[id]/route');
       const request = new NextRequest(`http://localhost/api/submissions/${mockSubmissionId}`, {
@@ -348,8 +349,8 @@ describe('Submissions API Routes', () => {
       const { getSubmissionById } = await import('@/lib/db/submissions');
       (getSubmissionById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
-      const { getDatabase } = await import('@/lib/mongodb');
-      (getDatabase as ReturnType<typeof vi.fn>).mockResolvedValue({});
+      const { getDatabaseConnected } = await import('@/lib/mongodb');
+      (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const { DELETE } = await import('@/app/api/submissions/[id]/route');
       const request = new NextRequest(`http://localhost/api/submissions/${mockSubmissionId}`, {
