@@ -117,13 +117,12 @@ describe('Deployment Readiness Verification', () => {
       expect(() => JSON.parse(content)).not.toThrow();
     });
 
-    it('should configure function timeout to 60 seconds', () => {
+    it('should not have explicit functions config for App Router', () => {
+      // Next.js 14 App Router routes are auto-detected by Vercel
+      // Explicit functions config causes build errors with src/app/api routes
       const content = readFileSync(vercelConfigPath, 'utf-8');
       const config = JSON.parse(content);
-      expect(config.functions).toBeDefined();
-      const apiConfig = config.functions['api/**/*.ts'];
-      expect(apiConfig).toBeDefined();
-      expect(apiConfig.maxDuration).toBe(60);
+      expect(config.functions).toBeUndefined();
     });
 
     it('should configure security headers', () => {

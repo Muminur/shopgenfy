@@ -23,34 +23,24 @@ describe('Vercel Configuration', () => {
   });
 
   describe('Functions configuration', () => {
-    it('should have functions configuration', () => {
+    it('should not have explicit functions config for Next.js App Router', () => {
+      // Next.js 14 App Router routes are handled automatically by Vercel
+      // No explicit functions configuration is needed or recommended
       const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-      expect(config.functions).toBeDefined();
+      expect(config.functions).toBeUndefined();
     });
 
-    it('should configure maxDuration to 60 seconds for API routes', () => {
-      const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-      expect(config.functions).toBeDefined();
-
-      // Check if there's a pattern that matches API routes
-      const apiPattern = Object.keys(config.functions).find(
-        (key) => key.includes('api') && key.includes('*.ts')
-      );
-
-      expect(apiPattern).toBeDefined();
-      expect(config.functions[apiPattern!].maxDuration).toBe(60);
-    });
-
-    it('should have maxDuration within Vercel limits (max 60s for hobby, 300s for pro)', () => {
+    it('should rely on Vercel auto-detection for App Router API routes', () => {
+      // Vercel automatically detects and configures Next.js App Router routes
+      // The api/ pattern doesn't match src/app/api/ routes
       const config = JSON.parse(readFileSync(configPath, 'utf-8'));
 
-      Object.values(config.functions || {}).forEach((funcConfig: unknown) => {
-        const fc = funcConfig as { maxDuration?: number };
-        if (fc.maxDuration) {
-          expect(fc.maxDuration).toBeGreaterThan(0);
-          expect(fc.maxDuration).toBeLessThanOrEqual(300);
-        }
-      });
+      // Verify we're not using legacy functions config
+      expect(config.functions).toBeUndefined();
+
+      // Verify we still have other essential configs
+      expect(config.headers).toBeDefined();
+      expect(config.regions).toBeDefined();
     });
   });
 
