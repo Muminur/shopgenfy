@@ -1,7 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import sharp from 'sharp';
 
-// Mock the Nano Banana client
+// Rate limiting is stubbed so repeated same-IP requests in this file never 429.
+vi.mock('@/lib/middleware/rate-limiter', () => ({
+  createRateLimiter: vi.fn(() => vi.fn(async () => null)),
+  rateLimitConfigs: {
+    gemini: {
+      models: { requests: 30, windowMs: 60000 },
+      analyze: { requests: 10, windowMs: 60000 },
+    },
+    nanobanana: {
+      generate: { requests: 5, windowMs: 60000 },
+      status: { requests: 60, windowMs: 60000 },
+      batch: { requests: 2, windowMs: 60000 },
+    },
+  },
+}));
+
+// The Pollinations client is mocked; the normalizer + image store run for real,
+// so mocked results must carry real, sharp-decodable image bytes.
 vi.mock('@/lib/nanobanana', () => ({
   createNanoBananaClient: vi.fn(() => ({
     generateImage: vi.fn(),
@@ -19,9 +37,24 @@ vi.mock('@/lib/nanobanana', () => ({
   },
 }));
 
-describe('Nano Banana API Routes', () => {
+import { imageStore } from '@/lib/image-store';
+
+async function pngBytes(width: number, height: number): Promise<Buffer> {
+  return sharp({
+    create: { width, height, channels: 3, background: { r: 200, g: 60, b: 90 } },
+  })
+    .png()
+    .toBuffer();
+}
+
+function idFromUrl(url: string): string {
+  return url.replace('/api/images/', '');
+}
+
+describe('Nano Banana API Routes (store-backed)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    imageStore.clear();
     process.env.NANO_BANANA_API_KEY = 'test-api-key';
   });
 
@@ -30,96 +63,7 @@ describe('Nano Banana API Routes', () => {
   });
 
   describe('POST /api/nanobanana/generate', () => {
-    it('should generate an image and return job info', async () => {
-      const mockResult = {
-        jobId: 'job-123',
-        status: 'completed',
-        imageUrl: 'https://cdn.nanobanana.io/images/job-123.png',
-        width: 1200,
-        height: 1200,
-        format: 'png',
-      };
-
-      const { createNanoBananaClient } = await import('@/lib/nanobanana');
-      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
-        generateImage: vi.fn().mockResolvedValue(mockResult),
-      });
-
-      const { POST } = await import('@/app/api/nanobanana/generate/route');
-      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'icon',
-          prompt: 'A simple app icon for an e-commerce tool',
-        }),
-      });
-
-      const response = await POST(request);
-
-      expect(response.status).toBe(200);
-      const data = await response.json();
-      expect(data.jobId).toBe('job-123');
-      expect(data.status).toBe('completed');
-      expect(data.image).toBeDefined();
-      expect(data.image.url).toBe('https://cdn.nanobanana.io/images/job-123.png');
-      expect(data.image.id).toBe('job-123');
-      expect(data.image.width).toBe(1200);
-      expect(data.image.height).toBe(1200);
-    });
-
-    it('should return 400 for missing type', async () => {
-      const { POST } = await import('@/app/api/nanobanana/generate/route');
-      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: 'A simple icon' }),
-      });
-
-      const response = await POST(request);
-
-      expect(response.status).toBe(400);
-      const data = await response.json();
-      expect(data.error).toContain('type');
-    });
-
-    it('should return 400 for missing prompt', async () => {
-      const { POST } = await import('@/app/api/nanobanana/generate/route');
-      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'icon' }),
-      });
-
-      const response = await POST(request);
-
-      expect(response.status).toBe(400);
-      const data = await response.json();
-      // Zod returns detailed validation error about missing/undefined string
-      expect(data.error).toBeDefined();
-    });
-
-    it('should return 400 for invalid image type', async () => {
-      const { POST } = await import('@/app/api/nanobanana/generate/route');
-      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'invalid-type',
-          prompt: 'A simple icon',
-        }),
-      });
-
-      const response = await POST(request);
-
-      expect(response.status).toBe(400);
-      const data = await response.json();
-      expect(data.error).toContain('type');
-    });
-
-    it('should work without API key (Pollinations.ai is FREE)', async () => {
-      delete process.env.NANO_BANANA_API_KEY;
-
+    it('normalizes generated bytes to 1200x1200 and serves them at /api/images/<id>', async () => {
       const mockResult = {
         jobId: 'pollinations-icon-123',
         status: 'completed',
@@ -127,6 +71,7 @@ describe('Nano Banana API Routes', () => {
         width: 1200,
         height: 1200,
         format: 'png',
+        buffer: await pngBytes(1024, 1024),
       };
 
       const { createNanoBananaClient } = await import('@/lib/nanobanana');
@@ -134,56 +79,43 @@ describe('Nano Banana API Routes', () => {
         generateImage: vi.fn().mockResolvedValue(mockResult),
       });
 
-      vi.resetModules();
       const { POST } = await import('@/app/api/nanobanana/generate/route');
       const request = new NextRequest('http://localhost/api/nanobanana/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'icon',
-          prompt: 'A simple icon',
-        }),
+        body: JSON.stringify({ type: 'icon', prompt: 'A simple app icon for an e-commerce tool' }),
       });
 
       const response = await POST(request);
-
-      // Should succeed because Pollinations.ai doesn't need an API key
       expect(response.status).toBe(200);
       const data = await response.json();
-      expect(data.jobId).toBeDefined();
+
+      expect(data.jobId).toBe('pollinations-icon-123');
+      expect(data.status).toBe('completed');
       expect(data.image).toBeDefined();
-      expect(data.image.url).toBeDefined();
+      expect(data.image.url).toMatch(/^\/api\/images\/[0-9a-f-]+$/i);
+      expect(data.image.width).toBe(1200);
+      expect(data.image.height).toBe(1200);
+      expect(data.image.provider).toBe('pollinations');
+      expect(Array.isArray(data.warnings)).toBe(true);
+
+      const stored = imageStore.get(idFromUrl(data.image.url));
+      expect(stored).toBeDefined();
+      const meta = await sharp(stored!.buffer).metadata();
+      expect(meta.width).toBe(1200);
+      expect(meta.height).toBe(1200);
+      expect(meta.format).toBe('png');
     });
 
-    it('should return 500 when generation fails', async () => {
-      const { createNanoBananaClient, NanoBananaError } = await import('@/lib/nanobanana');
-      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
-        generateImage: vi.fn().mockRejectedValue(new NanoBananaError('Generation failed', 500)),
-      });
-
-      const { POST } = await import('@/app/api/nanobanana/generate/route');
-      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'icon',
-          prompt: 'A simple icon',
-        }),
-      });
-
-      const response = await POST(request);
-
-      expect(response.status).toBe(500);
-    });
-
-    it('should handle feature image type with correct dimensions', async () => {
+    it('normalizes a feature image to 1600x900', async () => {
       const mockResult = {
-        jobId: 'job-456',
+        jobId: 'pollinations-feature-456',
         status: 'completed',
-        imageUrl: 'https://cdn.nanobanana.io/images/job-456.png',
+        imageUrl: 'https://image.pollinations.ai/prompt/feature',
         width: 1600,
         height: 900,
         format: 'png',
+        buffer: await pngBytes(1408, 768),
       };
 
       const { createNanoBananaClient } = await import('@/lib/nanobanana');
@@ -203,12 +135,67 @@ describe('Nano Banana API Routes', () => {
       });
 
       const response = await POST(request);
-
       expect(response.status).toBe(200);
       const data = await response.json();
-      expect(data.image).toBeDefined();
       expect(data.image.width).toBe(1600);
       expect(data.image.height).toBe(900);
+      expect(data.image.url).toMatch(/^\/api\/images\//);
+
+      const meta = await sharp(imageStore.get(idFromUrl(data.image.url))!.buffer).metadata();
+      expect(meta.width).toBe(1600);
+      expect(meta.height).toBe(900);
+    });
+
+    it('returns 400 for missing type', async () => {
+      const { POST } = await import('@/app/api/nanobanana/generate/route');
+      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'A simple icon' }),
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toContain('type');
+    });
+
+    it('returns 400 for missing prompt', async () => {
+      const { POST } = await import('@/app/api/nanobanana/generate/route');
+      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'icon' }),
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toBeDefined();
+    });
+
+    it('returns 400 for invalid image type', async () => {
+      const { POST } = await import('@/app/api/nanobanana/generate/route');
+      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'invalid-type', prompt: 'A simple icon' }),
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(400);
+      expect((await response.json()).error).toContain('type');
+    });
+
+    it('maps an upstream NanoBananaError (502) to 502', async () => {
+      const { createNanoBananaClient, NanoBananaError } = await import('@/lib/nanobanana');
+      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
+        generateImage: vi.fn().mockRejectedValue(new NanoBananaError('upstream failed', 502)),
+      });
+
+      const { POST } = await import('@/app/api/nanobanana/generate/route');
+      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'icon', prompt: 'A simple icon' }),
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(502);
     });
   });
 
@@ -217,10 +204,7 @@ describe('Nano Banana API Routes', () => {
       const mockStatus = {
         jobId: 'job-123',
         status: 'completed',
-        imageUrl: 'https://cdn.nanobanana.io/images/job-123.png',
-        width: 1200,
-        height: 1200,
-        format: 'png',
+        progress: 100,
       };
 
       const { createNanoBananaClient } = await import('@/lib/nanobanana');

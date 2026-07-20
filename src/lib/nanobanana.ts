@@ -32,6 +32,11 @@ export interface GeneratedImageResult {
   width?: number;
   height?: number;
   format?: ImageFormat;
+  /**
+   * Raw downloaded image bytes. The single upstream fetch is reused here so the
+   * route can normalize + store the image without a second network round-trip.
+   */
+  buffer?: Buffer;
   error?: string;
   progress?: number;
 }
@@ -177,14 +182,21 @@ export function createNanoBananaClient(_apiKey?: string): NanoBananaClient {
         throw new NanoBananaError('Response is not an image');
       }
 
-      // Return the direct image URL (Pollinations.ai returns the image directly)
+      // Reuse this single fetch: read the bytes so the caller can normalize +
+      // store them without a second round-trip. Pollinations often serves JPEG
+      // even when the URL looks PNG, so report the honest format.
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const format: ImageFormat = /jpe?g/i.test(contentType) ? 'jpeg' : 'png';
+
       return {
         jobId,
         status: 'completed',
         imageUrl: pollinationsUrl,
         width: dimensions.width,
         height: dimensions.height,
-        format: 'png',
+        format,
+        buffer,
       };
     } catch (error) {
       clearTimeout(timeoutId);
@@ -246,7 +258,9 @@ export function createNanoBananaClient(_apiKey?: string): NanoBananaClient {
   }
 
   /**
-   * Regenerates an existing image with a new seed while preserving the original prompt
+   * Regenerates an existing image with a new seed while preserving the original prompt.
+   * DB-coupled and slated for removal alongside the Nano Banana → Pollinations
+   * migration cleanup (status route + dead-method teardown).
    * @param imageId - The ID of the image to regenerate
    * @returns Promise resolving to the newly generated image result
    * @throws {NanoBananaError} If image is not found or generation fails
