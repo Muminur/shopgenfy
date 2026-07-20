@@ -100,6 +100,7 @@ export function createUserFactory(overrides: Partial<User> = {}): User {
     selectedGeminiModel: 'gemini-pro',
     theme: 'light',
     autoSave: true,
+    screenshotSource: 'website',
     createdAt: now,
     updatedAt: now,
     ...overrides,

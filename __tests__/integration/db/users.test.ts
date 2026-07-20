@@ -207,38 +207,55 @@ describe('Users Database Operations', () => {
     });
   });
 
-  describe('getOrCreateUser', () => {
-    it('should return existing user if found', async () => {
-      const created = await createUser(db, {
-        email: 'existing@example.com',
-        selectedGeminiModel: 'gemini-1.5-flash',
+  describe('getUserById (string-keyed)', () => {
+    it('should return a user document keyed by a client string id', async () => {
+      await getOrCreateUser(db, 'user-strkey');
+
+      const found = await getUserById(db, 'user-strkey');
+
+      expect(found).toBeDefined();
+      expect(found?._id).toBe('user-strkey');
+      expect(found?.selectedGeminiModel).toBe('auto');
+    });
+  });
+
+  describe('getOrCreateUser (string-keyed upsert)', () => {
+    it('should create a new user keyed by the provided string id with defaults', async () => {
+      const result = await getOrCreateUser(db, 'user-abc');
+
+      expect(result._id).toBe('user-abc');
+      expect(result.selectedGeminiModel).toBe('auto');
+      expect(result.theme).toBe('system');
+      expect(result.screenshotSource).toBe('website');
+      expect(result.autoSave).toBe(true);
+    });
+
+    it('should not require an email', async () => {
+      const result = await getOrCreateUser(db, 'user-noemail');
+      expect(result.email).toBeUndefined();
+    });
+
+    it('should be idempotent and not create a duplicate on the second call', async () => {
+      const first = await getOrCreateUser(db, 'user-dupe');
+      const second = await getOrCreateUser(db, 'user-dupe');
+
+      expect(second._id).toBe(first._id);
+      // beforeEach clears the collection, so the only doc is this one.
+      const count = await db.collection('users').countDocuments({});
+      expect(count).toBe(1);
+    });
+
+    it('should preserve existing settings on subsequent calls', async () => {
+      await getOrCreateUser(db, 'user-keep');
+      await updateUser(db, 'user-keep', {
         theme: 'dark',
-        autoSave: false,
+        selectedGeminiModel: 'gemini-flash-latest',
       });
 
-      const result = await getOrCreateUser(db, 'existing@example.com');
+      const result = await getOrCreateUser(db, 'user-keep');
 
-      expect(result._id.toString()).toBe(created._id.toString());
-      expect(result.theme).toBe('dark'); // Should keep existing settings
-      expect(result.selectedGeminiModel).toBe('gemini-1.5-flash');
-    });
-
-    it('should create new user if not found', async () => {
-      const result = await getOrCreateUser(db, 'newuser@example.com');
-
-      expect(result).toBeDefined();
-      expect(result.email).toBe('newuser@example.com');
-      expect(result.selectedGeminiModel).toBe('auto'); // default
-      expect(result.theme).toBe('light'); // default
-      expect(result.autoSave).toBe(true); // default
-    });
-
-    it('should create user with default settings', async () => {
-      const result = await getOrCreateUser(db, 'defaults@example.com');
-
-      expect(result.selectedGeminiModel).toBe('auto');
-      expect(result.theme).toBe('light');
-      expect(result.autoSave).toBe(true);
+      expect(result.theme).toBe('dark');
+      expect(result.selectedGeminiModel).toBe('gemini-flash-latest');
     });
   });
 });

@@ -1,24 +1,46 @@
-import { ObjectId, Db, WithId, Document } from 'mongodb';
+import { ObjectId, Db, WithId, Document, Filter } from 'mongodb';
 import { COLLECTIONS } from './collections';
-import { CreateUserInput, UpdateUserInput, createUserSchema } from '../validators/user';
+import {
+  CreateUserInput,
+  UpdateUserInput,
+  ScreenshotSource,
+  createUserSchema,
+} from '../validators/user';
 
 export interface UserDocument {
-  _id: ObjectId;
-  email: string;
+  // Users are keyed by an anonymous client string id (`user-<uuid>`). Legacy
+  // documents may still carry an ObjectId `_id`, so both are supported.
+  _id: string | ObjectId;
+  email?: string;
   selectedGeminiModel: string;
   theme: 'light' | 'dark' | 'system';
   autoSave: boolean;
+  screenshotSource: ScreenshotSource;
   createdAt: Date;
   updatedAt: Date;
 }
 
+/**
+ * Build a filter that matches a user by id whether the document is keyed by a
+ * client string (`user-<uuid>`) or a legacy ObjectId. A 24-hex string is a
+ * valid ObjectId, so we match either representation; anything else is treated
+ * as a plain string key.
+ */
+function buildIdFilter(id: string): Filter<Document> {
+  if (ObjectId.isValid(id)) {
+    return { _id: { $in: [id, new ObjectId(id)] } } as unknown as Filter<Document>;
+  }
+  return { _id: id } as unknown as Filter<Document>;
+}
+
 function toUser(doc: WithId<Document>): UserDocument {
   return {
-    _id: doc._id as ObjectId,
-    email: doc.email as string,
+    _id: doc._id as string | ObjectId,
+    email: doc.email as string | undefined,
     selectedGeminiModel: doc.selectedGeminiModel as string,
     theme: doc.theme as UserDocument['theme'],
     autoSave: (doc.autoSave as boolean) ?? true,
+    screenshotSource: (doc.screenshotSource as ScreenshotSource) ?? 'website',
     createdAt: doc.createdAt as Date,
     updatedAt: doc.updatedAt as Date,
   };
@@ -44,12 +66,8 @@ export async function createUser(db: Db, data: CreateUserInput): Promise<UserDoc
 }
 
 export async function getUserById(db: Db, id: string): Promise<UserDocument | null> {
-  if (!ObjectId.isValid(id)) {
-    return null;
-  }
-
   const collection = db.collection(COLLECTIONS.USERS);
-  const doc = await collection.findOne({ _id: new ObjectId(id) });
+  const doc = await collection.findOne(buildIdFilter(id));
 
   return doc ? toUser(doc) : null;
 }
@@ -66,13 +84,9 @@ export async function updateUser(
   id: string,
   data: UpdateUserInput
 ): Promise<UserDocument | null> {
-  if (!ObjectId.isValid(id)) {
-    return null;
-  }
-
   const collection = db.collection(COLLECTIONS.USERS);
   const result = await collection.findOneAndUpdate(
-    { _id: new ObjectId(id) },
+    buildIdFilter(id),
     {
       $set: {
         ...data,
@@ -86,26 +100,45 @@ export async function updateUser(
 }
 
 export async function deleteUser(db: Db, id: string): Promise<boolean> {
-  if (!ObjectId.isValid(id)) {
-    return false;
-  }
-
   const collection = db.collection(COLLECTIONS.USERS);
-  const result = await collection.deleteOne({ _id: new ObjectId(id) });
+  const result = await collection.deleteOne(buildIdFilter(id));
 
   return result.deletedCount === 1;
 }
 
-export async function getOrCreateUser(db: Db, email: string): Promise<UserDocument> {
-  const existing = await getUserByEmail(db, email);
-  if (existing) {
-    return existing;
+/**
+ * Upsert a user keyed by the client string id. No email is required — the id is
+ * the identity. New users get the app defaults; existing users are returned
+ * untouched.
+ */
+export async function getOrCreateUser(db: Db, userId: string): Promise<UserDocument> {
+  const collection = db.collection(COLLECTIONS.USERS);
+  const now = new Date();
+
+  const result = await collection.findOneAndUpdate(
+    { _id: userId } as unknown as Filter<Document>,
+    {
+      $setOnInsert: {
+        selectedGeminiModel: 'auto',
+        theme: 'system',
+        screenshotSource: 'website',
+        autoSave: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    { upsert: true, returnDocument: 'after' }
+  );
+
+  if (!result) {
+    // With upsert:true + returnDocument:'after' this should never be null, but
+    // fall back to a direct read to stay type-safe.
+    const doc = await collection.findOne({ _id: userId } as unknown as Filter<Document>);
+    if (!doc) {
+      throw new Error('Failed to upsert user');
+    }
+    return toUser(doc);
   }
 
-  return createUser(db, {
-    email,
-    selectedGeminiModel: 'auto',
-    theme: 'light',
-    autoSave: true,
-  });
+  return toUser(result);
 }

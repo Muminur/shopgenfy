@@ -38,6 +38,22 @@ describe('User Validation Schema', () => {
         expect(result.data.theme).toBe('dark');
       }
     });
+
+    it('should accept a user without an email (email is optional)', () => {
+      const result = createUserSchema.safeParse({});
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.email).toBeUndefined();
+      }
+    });
+
+    it('should default screenshotSource to "website"', () => {
+      const result = createUserSchema.safeParse({});
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.screenshotSource).toBe('website');
+      }
+    });
   });
 
   describe('updateUserSchema', () => {
@@ -58,6 +74,20 @@ describe('User Validation Schema', () => {
     it('should reject invalid theme value', () => {
       const result = updateUserSchema.safeParse({
         theme: 'invalid',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should allow updating screenshotSource', () => {
+      const result = updateUserSchema.safeParse({
+        screenshotSource: 'repo',
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject an invalid screenshotSource', () => {
+      const result = updateUserSchema.safeParse({
+        screenshotSource: 'ftp',
       });
       expect(result.success).toBe(false);
     });

@@ -45,10 +45,11 @@ export interface GeneratedImage {
 
 export interface User {
   id: string;
-  email: string;
+  email?: string;
   selectedGeminiModel: string;
   theme: 'light' | 'dark' | 'system';
   autoSave: boolean;
+  screenshotSource: 'website' | 'repo' | 'folder';
   createdAt: Date;
   updatedAt: Date;
 }

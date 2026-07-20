@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Download, Edit, ExternalLink, Check, Globe, ImageIcon, Radio } from 'lucide-react';
 import { usePreviewSync, PreviewFormData } from '@/hooks/usePreviewSync';
+import { apiFetch } from '@/lib/api-client';
 
 interface Submission {
   id: string;
@@ -80,7 +81,7 @@ function PreviewContent() {
       if (submissionId) {
         try {
           // Fetch submission
-          const submissionRes = await fetch(`/api/submissions/${submissionId}`);
+          const submissionRes = await apiFetch(`/api/submissions/${submissionId}`);
           if (!submissionRes.ok) {
             if (submissionRes.status === 404) {
               setError('Submission not found');
@@ -94,7 +95,7 @@ function PreviewContent() {
           setSubmission(submissionData);
 
           // Fetch images
-          const imagesRes = await fetch(`/api/images?submissionId=${submissionId}`);
+          const imagesRes = await apiFetch(`/api/images?submissionId=${submissionId}`);
           if (imagesRes.ok) {
             const imagesData = await imagesRes.json();
             setImages(imagesData.images || []);
@@ -157,7 +158,7 @@ function PreviewContent() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/export/${submissionId}`);
+      const response = await apiFetch(`/api/export/${submissionId}`);
       if (!response.ok) {
         throw new Error('Failed to export submission');
       }

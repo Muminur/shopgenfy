@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Save, Sparkles, Moon, Sun, Monitor, Loader2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { apiFetch } from '@/lib/api-client';
 
 interface Settings {
   selectedModel: string;
@@ -73,7 +74,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const response = await fetch('/api/settings');
+        const response = await apiFetch('/api/settings');
         if (response.ok) {
           const data = await response.json();
           const loadedTheme = data.theme || defaultSettings.theme;
@@ -128,7 +129,7 @@ export default function SettingsPage() {
         autoSave: settings.autoSave,
       };
 
-      const response = await fetch('/api/settings', {
+      const response = await apiFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(apiPayload),

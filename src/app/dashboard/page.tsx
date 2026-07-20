@@ -1,28 +1,6 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-
-// Helper to get or create a persistent user ID for demo purposes
-// In production, this would come from a proper auth system (NextAuth, Auth0, etc.)
-function getOrCreateUserId(): string {
-  if (typeof window === 'undefined') return 'demo-user';
-
-  try {
-    const storageKey = 'shopgenfy_user_id';
-    let userId = localStorage.getItem(storageKey);
-
-    if (!userId) {
-      // Use crypto.randomUUID() for cryptographically secure IDs
-      userId = `user-${crypto.randomUUID()}`;
-      localStorage.setItem(storageKey, userId);
-    }
-
-    return userId;
-  } catch {
-    // localStorage might not be available in test environments
-    return 'demo-user';
-  }
-}
 import Link from 'next/link';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CharacterCountInput } from '@/components/forms/CharacterCountInput';
@@ -54,6 +32,7 @@ import {
 import { SUPPORTED_LANGUAGES, SHOPIFY_INTEGRATIONS } from '@/lib/validators/constants';
 import { PricingConfig } from '@/types';
 import { usePreviewSync, PreviewFormData } from '@/hooks/usePreviewSync';
+import { apiFetch, saveDraft, SUBMISSION_ID_STORAGE_KEY } from '@/lib/api-client';
 
 // Helper to sanitize text for image prompts - removes Shopify branding and URLs
 function sanitizeForPrompt(text: string): string {
@@ -101,6 +80,27 @@ const LIMITS = {
   maxFeatures: 10,
 };
 
+// Build a submission payload that validates against BOTH the POST route
+// (which maps features -> featureList) and the PUT [id] route (which does NOT
+// transform): send featureList directly and omit empty optional fields.
+function buildSubmissionPayload(formData: FormData): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    appName: formData.appName,
+    appIntroduction: formData.appIntroduction,
+    appDescription: formData.appDescription,
+    featureList: formData.features,
+    languages: formData.languages,
+    worksWith: formData.worksWith,
+    pricing: formData.pricing,
+    featureTags: [],
+    status: 'draft',
+  };
+  if (formData.primaryCategory) payload.primaryCategory = formData.primaryCategory;
+  if (formData.secondaryCategory) payload.secondaryCategory = formData.secondaryCategory;
+  if (formData.landingPageUrl) payload.landingPageUrl = formData.landingPageUrl;
+  return payload;
+}
+
 export default function DashboardPage() {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -132,6 +132,32 @@ export default function DashboardPage() {
   // Preview sync hook for real-time preview synchronization
   const { saveToPreview, lastSynced } = usePreviewSync({ debounceMs: 500 });
 
+  // Persisted submission id for upsert auto-save: POST once, then PUT the same
+  // document. Hydrated from localStorage so a reload keeps the same draft.
+  const submissionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(SUBMISSION_ID_STORAGE_KEY);
+      if (stored) submissionIdRef.current = stored;
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
+
+  const persistDraft = useCallback(async () => {
+    const payload = buildSubmissionPayload(formData);
+    const { id } = await saveDraft(payload, submissionIdRef.current);
+    if (id) {
+      submissionIdRef.current = id;
+      try {
+        localStorage.setItem(SUBMISSION_ID_STORAGE_KEY, id);
+      } catch {
+        /* localStorage unavailable */
+      }
+    }
+  }, [formData]);
+
   // Calculate completion progress
   const calculateProgress = useCallback(() => {
     let completed = 0;
@@ -157,7 +183,7 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/gemini/analyze', {
+      const response = await apiFetch('/api/gemini/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: formData.landingPageUrl }),
@@ -233,7 +259,7 @@ export default function DashboardPage() {
         .filter(Boolean)
         .join('. ');
 
-      const iconResponse = await fetch('/api/nanobanana/generate', {
+      const iconResponse = await apiFetch('/api/nanobanana/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -276,7 +302,7 @@ export default function DashboardPage() {
           .filter(Boolean)
           .join('. ');
 
-        const featureResponse = await fetch('/api/nanobanana/generate', {
+        const featureResponse = await apiFetch('/api/nanobanana/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -345,7 +371,7 @@ export default function DashboardPage() {
 
       // Use the Imagen API to generate all images
       // If screenshots are available, they will be used for feature image generation
-      const response = await fetch('/api/imagen/generate', {
+      const response = await apiFetch('/api/imagen/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -417,24 +443,7 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      const userId = getOrCreateUserId();
-      const response = await fetch('/api/submissions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': userId,
-        },
-        body: JSON.stringify({
-          ...formData,
-          status: 'draft',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to save submission');
-      }
-
+      await persistDraft();
       setSuccess('Submission saved successfully!');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save submission';
@@ -442,7 +451,7 @@ export default function DashboardPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [formData]);
+  }, [persistDraft]);
 
   const handleExport = useCallback(async () => {
     if (images.length === 0) {
@@ -502,7 +511,7 @@ export default function DashboardPage() {
       for (const image of images) {
         try {
           const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(image.url)}`;
-          const imgResponse = await fetch(proxyUrl);
+          const imgResponse = await apiFetch(proxyUrl);
           if (imgResponse.ok) {
             const imgBlob = await imgResponse.blob();
             const imgUrl = URL.createObjectURL(imgBlob);
@@ -611,7 +620,7 @@ export default function DashboardPage() {
           };
         }
 
-        const response = await fetch('/api/nanobanana/generate', {
+        const response = await apiFetch('/api/nanobanana/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
@@ -724,25 +733,13 @@ export default function DashboardPage() {
     }
 
     // Set new timer for auto-save (30 seconds debounce)
-    autoSaveTimerRef.current = setTimeout(async () => {
+    autoSaveTimerRef.current = setTimeout(() => {
       if (formData.appName || formData.appIntroduction) {
-        try {
-          const userId = getOrCreateUserId();
-          await fetch('/api/submissions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': userId,
-            },
-            body: JSON.stringify({
-              ...formData,
-              status: 'draft',
-            }),
-          });
-        } catch (error) {
+        // Upsert: POST once, then PUT the same draft (no duplicate documents).
+        persistDraft().catch((error) => {
           // Silent fail for auto-save
           console.error('Auto-save failed:', error);
-        }
+        });
       }
     }, 30000);
 
@@ -751,7 +748,7 @@ export default function DashboardPage() {
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [formData]);
+  }, [formData, persistDraft]);
 
   // Sync form data to localStorage for preview
   useEffect(() => {

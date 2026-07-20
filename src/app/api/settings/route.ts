@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabaseConnected } from '@/lib/mongodb';
-import { getUserById, updateUser } from '@/lib/db/users';
+import { getOrCreateUser, updateUser } from '@/lib/db/users';
 
 const VALID_THEMES = ['light', 'dark', 'system'] as const;
+const VALID_SCREENSHOT_SOURCES = ['website', 'repo', 'folder'] as const;
 
 function getUserId(request: NextRequest): string | null {
   return request.headers.get('x-user-id');
@@ -17,21 +18,19 @@ export async function GET(request: NextRequest) {
 
   try {
     const db = await getDatabaseConnected();
-    const user = await getUserById(db, userId);
+    // Upsert: a well-formed id can never 404 — new users get defaults.
+    const user = await getOrCreateUser(db, userId);
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    // Return only settings-related fields
     return NextResponse.json({
       selectedGeminiModel: user.selectedGeminiModel,
       theme: user.theme,
       autoSave: user.autoSave,
+      screenshotSource: user.screenshotSource,
     });
   } catch (error) {
     console.error('Failed to fetch settings:', error);
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
+    // DB unreachable/unconfigured — fail fast so the client can fall back.
+    return NextResponse.json({ error: 'Settings service unavailable' }, { status: 503 });
   }
 }
 
@@ -46,6 +45,7 @@ export async function PUT(request: NextRequest) {
     selectedGeminiModel?: string;
     theme?: string;
     autoSave?: boolean;
+    screenshotSource?: string;
   };
 
   try {
@@ -62,14 +62,24 @@ export async function PUT(request: NextRequest) {
     );
   }
 
+  // Validate screenshotSource if provided
+  if (
+    body.screenshotSource &&
+    !VALID_SCREENSHOT_SOURCES.includes(
+      body.screenshotSource as (typeof VALID_SCREENSHOT_SOURCES)[number]
+    )
+  ) {
+    return NextResponse.json(
+      { error: 'Invalid screenshotSource. Must be "website", "repo", or "folder"' },
+      { status: 400 }
+    );
+  }
+
   try {
     const db = await getDatabaseConnected();
 
-    // Check if user exists
-    const existingUser = await getUserById(db, userId);
-    if (!existingUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
+    // Ensure the user exists (upsert) so an update can never 404.
+    await getOrCreateUser(db, userId);
 
     // Build update object with only provided fields
     const updates: Record<string, unknown> = {};
@@ -82,6 +92,9 @@ export async function PUT(request: NextRequest) {
     if (body.autoSave !== undefined) {
       updates.autoSave = body.autoSave;
     }
+    if (body.screenshotSource !== undefined) {
+      updates.screenshotSource = body.screenshotSource;
+    }
 
     const updated = await updateUser(db, userId, updates);
 
@@ -89,14 +102,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
     }
 
-    // Return only settings-related fields
     return NextResponse.json({
       selectedGeminiModel: updated.selectedGeminiModel,
       theme: updated.theme,
       autoSave: updated.autoSave,
+      screenshotSource: updated.screenshotSource,
     });
   } catch (error) {
     console.error('Failed to update settings:', error);
-    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
+    return NextResponse.json({ error: 'Settings service unavailable' }, { status: 503 });
   }
 }
