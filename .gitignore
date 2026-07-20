@@ -60,3 +60,13 @@ next-env.d.ts
 *.temp
 .cache/
 .serena/
+
+# Windows reserved-name artifact
+nul
+
+# Tooling directories (local only)
+.playwright-mcp/
+.omc/
+
+# Planning docs (local only - not part of the shipped repo)
+docs/superpowers/
