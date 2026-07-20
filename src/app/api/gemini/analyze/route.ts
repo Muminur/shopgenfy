@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGeminiClient, GeminiError } from '@/lib/gemini';
+import { fetchGitHubRepo, isGitHubRepoUrl } from '@/lib/github-fetcher';
 import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
 
 const rateLimiter = createRateLimiter(rateLimitConfigs.gemini.analyze);
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { url?: string; model?: string };
+  let body: { url?: string; model?: string; sourceType?: 'url' | 'github' | 'source' };
   try {
     body = await request.json();
   } catch {
@@ -48,9 +49,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Only HTTP and HTTPS URLs are allowed' }, { status: 400 });
   }
 
+  // Route GitHub repository links through the repo fetcher + shared analysis
+  // pipeline. Detected explicitly (sourceType) or by URL shape.
+  const useGitHub = body.sourceType === 'github' || isGitHubRepoUrl(body.url);
+
   try {
     const client = createGeminiClient(apiKey);
-    const analysis = await client.analyzeUrl(body.url, { model: body.model });
+    const analysis = useGitHub
+      ? await client.analyzeContent(await fetchGitHubRepo(body.url, process.env.GITHUB_TOKEN), {
+          model: body.model,
+        })
+      : await client.analyzeUrl(body.url, { model: body.model });
 
     return NextResponse.json(analysis);
   } catch (error) {

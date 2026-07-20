@@ -67,6 +67,18 @@ describe('API Version Manager - Integration Tests', () => {
         confidence: 0.9,
         screenshots: [],
       }),
+      analyzeContent: async (_content) => ({
+        appName: 'Test App',
+        appIntroduction: 'Test intro',
+        appDescription: 'Test description',
+        featureList: ['Feature 1'],
+        languages: ['en'],
+        primaryCategory: 'Store design',
+        featureTags: ['test'],
+        pricing: { type: 'free' as const },
+        confidence: 0.9,
+        screenshots: [],
+      }),
     };
 
     mockNanoBananaClient = {

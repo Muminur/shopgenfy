@@ -7,6 +7,7 @@ vi.mock('@/lib/gemini', () => ({
     listModels: vi.fn(),
     generateContent: vi.fn(),
     analyzeUrl: vi.fn(),
+    analyzeContent: vi.fn(),
   })),
   GeminiError: class GeminiError extends Error {
     constructor(
@@ -17,6 +18,13 @@ vi.mock('@/lib/gemini', () => ({
       this.name = 'GeminiError';
     }
   },
+}));
+
+// Mock the GitHub fetcher. `isGitHubRepoUrl` keeps its real owner/repo
+// detection so the URL-path tests still resolve to the webpage analyzer.
+vi.mock('@/lib/github-fetcher', () => ({
+  isGitHubRepoUrl: (url: string) => /^https?:\/\/(www\.)?github\.com\/[^/]+\/[^/]+/i.test(url),
+  fetchGitHubRepo: vi.fn(),
 }));
 
 describe('Gemini API Routes', () => {
@@ -151,6 +159,75 @@ describe('Gemini API Routes', () => {
       const data = await response.json();
       expect(data.appName).toBe('MyBrand App');
       expect(data.confidence).toBe(0.85);
+    });
+
+    it('routes a GitHub repo URL through the fetcher and analyzeContent', async () => {
+      const mockAnalysis = {
+        appName: 'Repo App',
+        appIntroduction: 'Built from a repository',
+        appDescription: 'Analyzed straight from the GitHub source.',
+        featureList: ['Feature A'],
+        languages: ['en'],
+        primaryCategory: 'Store management',
+        featureTags: ['repo'],
+        pricing: { type: 'free' as const },
+        confidence: 0.8,
+        screenshots: [],
+      };
+
+      const analyzeContent = vi.fn().mockResolvedValue(mockAnalysis);
+      const analyzeUrl = vi.fn();
+      const { createGeminiClient } = await import('@/lib/gemini');
+      (createGeminiClient as ReturnType<typeof vi.fn>).mockReturnValue({
+        analyzeUrl,
+        analyzeContent,
+      });
+
+      const { fetchGitHubRepo } = await import('@/lib/github-fetcher');
+      (fetchGitHubRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+        title: 'repo',
+        description: 'desc',
+        textContent: 'content',
+        images: [],
+        sourceLabel: 'GitHub repository owner/repo',
+      });
+
+      const { POST } = await import('@/app/api/gemini/analyze/route');
+      const request = new NextRequest('http://localhost/api/gemini/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://github.com/owner/repo' }),
+      });
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.appName).toBe('Repo App');
+      expect(vi.mocked(fetchGitHubRepo).mock.calls[0][0]).toBe('https://github.com/owner/repo');
+      expect(analyzeContent).toHaveBeenCalledTimes(1);
+      expect(analyzeUrl).not.toHaveBeenCalled();
+    });
+
+    it('maps a GitHub fetcher error to its status code', async () => {
+      const { GeminiError } = await import('@/lib/gemini');
+      const { fetchGitHubRepo } = await import('@/lib/github-fetcher');
+      (fetchGitHubRepo as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new GeminiError('Repository not found', 404)
+      );
+
+      const { POST } = await import('@/app/api/gemini/analyze/route');
+      const request = new NextRequest('http://localhost/api/gemini/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://github.com/owner/missing' }),
+      });
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(404);
+      const data = await response.json();
+      expect(data.error).toContain('Repository not found');
     });
 
     it('should return 400 for missing URL', async () => {

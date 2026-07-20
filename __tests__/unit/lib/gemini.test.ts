@@ -7,6 +7,7 @@ import {
   type GeminiModel,
   type GeminiGenerateOptions,
   type GeminiAnalysisResult,
+  type PreparedContent,
 } from '@/lib/gemini';
 import { clearDeadModelCache } from '@/lib/model-resolver';
 
@@ -552,6 +553,70 @@ describe('GeminiClient', () => {
       const result = await client.analyzeUrl('https://example.com');
 
       expect(result.primaryCategory).toBe('');
+    });
+  });
+
+  describe('analyzeContent', () => {
+    it('runs the shared pipeline for arbitrary content and maps images to screenshots', async () => {
+      clearDeadModelCache();
+
+      const content: PreparedContent = {
+        title: 'is-online',
+        description: 'Check if the internet connection is up',
+        textContent:
+          'is-online lets merchants verify connectivity from Node and the browser with a tiny, dependency-light API.',
+        images: [{ base64: 'aW1nMQ==', mimeType: 'image/png' }],
+        sourceLabel: 'GitHub repository sindresorhus/is-online',
+      };
+
+      const mockAnalysis = {
+        appName: 'is-online',
+        appIntroduction: 'Know when your store is reachable',
+        appDescription: 'Detects connectivity so storefront actions never silently fail.',
+        featureList: ['Connectivity checks'],
+        languages: ['en'],
+        primaryCategory: 'Store management',
+        featureTags: ['connectivity'],
+        pricing: { type: 'free' as const },
+        confidence: 0.8,
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: { parts: [{ text: JSON.stringify(mockAnalysis) }], role: 'model' },
+                finishReason: 'STOP',
+              },
+            ],
+          }),
+      });
+
+      const result = await client.analyzeContent(content);
+
+      expect(result.appName).toBe('is-online');
+      // Pre-downloaded images become base64-only screenshots (no source url).
+      expect(result.screenshots).toEqual([{ base64: 'aW1nMQ==', mimeType: 'image/png' }]);
+
+      // The source label is carried into the prompt preamble.
+      const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+      const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const promptText = requestBody.contents[0].parts[0].text as string;
+      expect(promptText).toContain('GitHub repository sindresorhus/is-online');
+    });
+
+    it('rejects content with insufficient text', async () => {
+      const content: PreparedContent = {
+        title: '',
+        description: '',
+        textContent: 'too short',
+        images: [],
+        sourceLabel: 'GitHub repository owner/repo',
+      };
+
+      await expect(client.analyzeContent(content)).rejects.toThrow('insufficient content');
     });
   });
 
