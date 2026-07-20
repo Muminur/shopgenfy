@@ -20,7 +20,7 @@ interface SubmissionDocument {
   appIntroduction?: string;
   appDescription?: string;
   primaryCategory: string;
-  features: string[];
+  featureList: string[];
   status: string;
 }
 
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     const prompts = generateBatchPrompts({
       appName: submission.appName,
       primaryCategory: submission.primaryCategory,
-      features: submission.features || [],
+      features: submission.featureList || [],
       appDescription: submission.appDescription,
     });
 

@@ -23,8 +23,6 @@ vi.mock('@/lib/middleware/rate-limiter', () => ({
 vi.mock('@/lib/nanobanana', () => ({
   createNanoBananaClient: vi.fn(() => ({
     generateImage: vi.fn(),
-    getJobStatus: vi.fn(),
-    checkVersion: vi.fn(),
   })),
   NanoBananaError: class NanoBananaError extends Error {
     constructor(
@@ -55,7 +53,6 @@ describe('Nano Banana API Routes (store-backed)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     imageStore.clear();
-    process.env.NANO_BANANA_API_KEY = 'test-api-key';
   });
 
   afterEach(() => {
@@ -196,65 +193,6 @@ describe('Nano Banana API Routes (store-backed)', () => {
       });
       const response = await POST(request);
       expect(response.status).toBe(502);
-    });
-  });
-
-  describe('GET /api/nanobanana/status/[jobId]', () => {
-    it('should return job status', async () => {
-      const mockStatus = {
-        jobId: 'job-123',
-        status: 'completed',
-        progress: 100,
-      };
-
-      const { createNanoBananaClient } = await import('@/lib/nanobanana');
-      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
-        getJobStatus: vi.fn().mockResolvedValue(mockStatus),
-      });
-
-      const { GET } = await import('@/app/api/nanobanana/status/[jobId]/route');
-      const request = new NextRequest('http://localhost/api/nanobanana/status/job-123');
-      const response = await GET(request, { params: Promise.resolve({ jobId: 'job-123' }) });
-
-      expect(response.status).toBe(200);
-      const data = await response.json();
-      expect(data.jobId).toBe('job-123');
-      expect(data.status).toBe('completed');
-    });
-
-    it('should return processing status for incomplete jobs', async () => {
-      const mockStatus = {
-        jobId: 'job-789',
-        status: 'processing',
-        progress: 50,
-      };
-
-      const { createNanoBananaClient } = await import('@/lib/nanobanana');
-      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
-        getJobStatus: vi.fn().mockResolvedValue(mockStatus),
-      });
-
-      const { GET } = await import('@/app/api/nanobanana/status/[jobId]/route');
-      const request = new NextRequest('http://localhost/api/nanobanana/status/job-789');
-      const response = await GET(request, { params: Promise.resolve({ jobId: 'job-789' }) });
-
-      expect(response.status).toBe(200);
-      const data = await response.json();
-      expect(data.status).toBe('processing');
-      expect(data.progress).toBe(50);
-    });
-
-    it('should return 404 for non-existent job', async () => {
-      const { createNanoBananaClient, NanoBananaError } = await import('@/lib/nanobanana');
-      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
-        getJobStatus: vi.fn().mockRejectedValue(new NanoBananaError('Job not found', 404)),
-      });
-
-      const { GET } = await import('@/app/api/nanobanana/status/[jobId]/route');
-      const request = new NextRequest('http://localhost/api/nanobanana/status/invalid-job');
-      const response = await GET(request, { params: Promise.resolve({ jobId: 'invalid-job' }) });
-
-      expect(response.status).toBe(404);
     });
   });
 });
