@@ -85,7 +85,6 @@ export interface NanoBananaClient {
   ): Promise<GeneratedImageResult[]>;
   getJobStatus(jobId: string): Promise<JobStatus>;
   checkVersion(): Promise<VersionInfo>;
-  regenerateImage(imageId: string): Promise<GeneratedImageResult>;
 }
 
 function getImageDimensions(type: ImageType): { width: number; height: number } {
@@ -257,50 +256,10 @@ export function createNanoBananaClient(_apiKey?: string): NanoBananaClient {
     };
   }
 
-  /**
-   * Regenerates an existing image with a new seed while preserving the original prompt.
-   * DB-coupled and slated for removal alongside the Nano Banana → Pollinations
-   * migration cleanup (status route + dead-method teardown).
-   * @param imageId - The ID of the image to regenerate
-   * @returns Promise resolving to the newly generated image result
-   * @throws {NanoBananaError} If image is not found or generation fails
-   */
-  async function regenerateImage(imageId: string): Promise<GeneratedImageResult> {
-    // Import db operations and connection dynamically to avoid circular dependencies
-    const { getImageById, updateImage } = await import('./db/images');
-    const { getDatabaseConnected } = await import('./mongodb');
-    const db = await getDatabaseConnected();
-
-    // Get original image metadata
-    const originalImage = await getImageById(db, imageId);
-    if (!originalImage) {
-      throw new NanoBananaError('Image not found');
-    }
-
-    // Regenerate with same prompt and dimensions
-    const request: ImageGenerationRequest = {
-      type: originalImage.type,
-      prompt: originalImage.generationPrompt,
-      featureHighlight: originalImage.featureHighlighted,
-    };
-
-    const result = await generateImage(request);
-
-    // Update database with new image data and increment version
-    await updateImage(db, imageId, {
-      driveUrl: result.imageUrl || '',
-      driveFileId: result.jobId,
-      version: originalImage.version + 1,
-    });
-
-    return result;
-  }
-
   return {
     generateImage,
     generateBatch,
     getJobStatus,
     checkVersion,
-    regenerateImage,
   };
 }
