@@ -3,8 +3,8 @@
 # Security Check: Scan for potential secrets in staged files
 echo "Running security checks..."
 
-# Check for .env files in staging
-ENV_FILES=$(git diff --cached --name-only | grep -E "^\.env|\.env\." || true)
+# Check for .env files in staging (".env.example" is the documented, allowed exception)
+ENV_FILES=$(git diff --cached --name-only | grep -E "^\.env|\.env\." | grep -vE "(^|/)\.env\.example$" || true)
 if [ -n "$ENV_FILES" ]; then
   echo "ERROR: .env file(s) detected in staging!"
   echo "$ENV_FILES"
