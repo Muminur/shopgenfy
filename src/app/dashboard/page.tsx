@@ -115,6 +115,11 @@ export default function DashboardPage() {
       width: number;
       height: number;
       alt: string;
+      // Which backend produced the image — drives per-provider regeneration.
+      provider: 'pollinations' | 'gemini' | 'upload';
+      // The feature this image showcases, carried on the object so regeneration
+      // never has to parse it back out of alt text.
+      featureText?: string;
     }[]
   >([]);
   const [error, setError] = useState<string | null>(null);
@@ -279,6 +284,7 @@ export default function DashboardPage() {
             width: iconData.image.width || 1200,
             height: iconData.image.height || 1200,
             alt: iconData.image.altText || `${formData.appName} app icon`,
+            provider: iconData.image.provider || 'pollinations',
           });
         }
       }
@@ -323,6 +329,8 @@ export default function DashboardPage() {
               width: featureData.image.width || 1600,
               height: featureData.image.height || 900,
               alt: featureData.image.altText || `${formData.appName} - ${feature}`,
+              provider: featureData.image.provider || 'pollinations',
+              featureText: featureData.image.featureText || feature,
             });
           }
         }
@@ -399,6 +407,8 @@ export default function DashboardPage() {
             width: number;
             height: number;
             altText: string;
+            provider?: 'pollinations' | 'gemini' | 'upload';
+            featureText?: string;
           }) => ({
             id: img.id,
             url: img.url,
@@ -406,6 +416,8 @@ export default function DashboardPage() {
             width: img.width,
             height: img.height,
             alt: img.altText,
+            provider: img.provider || 'gemini',
+            featureText: img.featureText,
           })
         );
         setImages(generatedImages);
@@ -462,75 +474,42 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      // Create metadata JSON
-      const metadata = {
-        exportedAt: new Date().toISOString(),
-        version: '1.0.0',
-        submission: {
-          appName: formData.appName,
-          appIntroduction: formData.appIntroduction,
-          appDescription: formData.appDescription,
-          features: formData.features.filter((f) => f.trim()),
-          languages: formData.languages,
-          primaryCategory: formData.primaryCategory,
-          secondaryCategory: formData.secondaryCategory,
-          pricing: formData.pricing,
-          landingPageUrl: formData.landingPageUrl,
-        },
-        images: images.map((img) => ({
-          id: img.id,
-          type: img.type,
-          width: img.width,
-          height: img.height,
-          url: img.url,
-          alt: img.alt,
-        })),
-        shopifyCompliance: {
-          appNameLength: `${formData.appName.length}/30`,
-          appIntroLength: `${formData.appIntroduction.length}/100`,
-          appDescriptionLength: `${formData.appDescription.length}/500`,
-          iconDimensions: '1200x1200',
-          featureImageDimensions: '1600x900',
-        },
-      };
-
-      // Download metadata JSON
-      const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], {
-        type: 'application/json',
+      // Single stateless export: the server pulls the real PNG bytes from the
+      // image store (by id) and streams back one ZIP with metadata + images.
+      const response = await apiFetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submission: {
+            appName: formData.appName,
+            appIntroduction: formData.appIntroduction,
+            appDescription: formData.appDescription,
+            features: formData.features.filter((f) => f.trim()),
+            languages: formData.languages,
+            worksWith: formData.worksWith,
+            primaryCategory: formData.primaryCategory,
+            secondaryCategory: formData.secondaryCategory,
+            pricing: formData.pricing,
+            landingPageUrl: formData.landingPageUrl,
+          },
+          imageIds: images.map((img) => img.id),
+        }),
       });
-      const metadataUrl = URL.createObjectURL(metadataBlob);
-      const metadataLink = document.createElement('a');
-      metadataLink.href = metadataUrl;
-      metadataLink.download = `${formData.appName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-metadata.json`;
-      document.body.appendChild(metadataLink);
-      metadataLink.click();
-      document.body.removeChild(metadataLink);
-      URL.revokeObjectURL(metadataUrl);
 
-      // Download each image through proxy to avoid CORS issues
-      for (const image of images) {
-        try {
-          const proxyUrl = `/api/proxy/image?url=${encodeURIComponent(image.url)}`;
-          const imgResponse = await apiFetch(proxyUrl);
-          if (imgResponse.ok) {
-            const imgBlob = await imgResponse.blob();
-            const imgUrl = URL.createObjectURL(imgBlob);
-            const imgLink = document.createElement('a');
-            imgLink.href = imgUrl;
-            const filename =
-              image.type === 'icon'
-                ? `${formData.appName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-icon.png`
-                : `${formData.appName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-feature-${image.id.slice(-6)}.png`;
-            imgLink.download = filename;
-            document.body.appendChild(imgLink);
-            imgLink.click();
-            document.body.removeChild(imgLink);
-            URL.revokeObjectURL(imgUrl);
-          }
-        } catch (imgError) {
-          console.warn(`Failed to download image ${image.id}:`, imgError);
-        }
+      if (!response.ok) {
+        throw new Error(`Export failed (${response.status})`);
       }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      const base = formData.appName.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'shopgenfy';
+      link.download = `${base}-export.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
 
       setSuccess(`Exported ${images.length} image(s) and metadata successfully!`);
     } catch (err) {
@@ -548,79 +527,94 @@ export default function DashboardPage() {
         return;
       }
 
+      // Uploaded screenshots are user-provided; there is nothing to regenerate.
+      if (imageToRegenerate.provider === 'upload') {
+        setError('Uploaded images cannot be regenerated. Upload a replacement instead.');
+        return;
+      }
+
       setIsGeneratingImages(true);
       setError(null);
 
+      // Feature text is carried on the image object (never parsed from alt text).
+      const featureText = imageToRegenerate.featureText || formData.features[0] || '';
+
       try {
-        // Sanitize content for prompts
-        const sanitizedAppName = sanitizeForPrompt(formData.appName);
-        const sanitizedDescription = sanitizeForPrompt(formData.appDescription);
-        const sanitizedIntro = sanitizeForPrompt(formData.appIntroduction);
-        const sanitizedCategory = sanitizeForPrompt(formData.primaryCategory);
+        let endpoint: string;
+        let requestBody: Record<string, unknown>;
 
-        let prompt: string;
-        let requestBody: {
-          type: 'icon' | 'feature';
-          prompt: string;
-          style: string;
-          featureHighlight?: string;
-        };
-
-        if (imageToRegenerate.type === 'icon') {
-          // Build rich context for icon
-          const appContext = [
-            sanitizedDescription,
-            sanitizedIntro,
-            sanitizedCategory ? `Category: ${sanitizedCategory}` : '',
-          ]
-            .filter(Boolean)
-            .join('. ');
-
-          prompt = [
-            `Professional app icon for "${sanitizedAppName}"`,
-            sanitizedCategory ? `a ${sanitizedCategory} application` : '',
-            appContext ? `Context: ${appContext.slice(0, 150)}` : '',
-            'Style: modern, flat design, minimalist, simple geometric shapes',
-            'high contrast, vibrant colors, single focal point, centered composition',
-            'suitable for app store listing',
-          ]
-            .filter(Boolean)
-            .join('. ');
-
-          requestBody = {
-            type: 'icon',
-            prompt,
-            style: 'modern',
-          };
+        if (imageToRegenerate.provider === 'gemini') {
+          // Premium path: the Imagen route builds its own prompt from structured
+          // fields, so pass them directly rather than a pre-built prompt string.
+          endpoint = '/api/imagen/generate';
+          requestBody =
+            imageToRegenerate.type === 'icon'
+              ? {
+                  type: 'icon',
+                  appName: formData.appName || 'My App',
+                  appDescription: formData.appDescription || formData.appIntroduction,
+                }
+              : {
+                  type: 'feature',
+                  appName: formData.appName || 'My App',
+                  appDescription: formData.appDescription || formData.appIntroduction,
+                  featureText,
+                };
         } else {
-          // For feature images, try to find the original feature text from the alt text
-          // Alt format is usually "${appName} - ${feature}"
-          const altParts = imageToRegenerate.alt.split(' - ');
-          const featureText =
-            altParts.length > 1 ? altParts.slice(1).join(' - ') : formData.features[0] || '';
-          const sanitizedFeature = sanitizeForPrompt(featureText);
+          // Free path (Pollinations): build a sanitized prompt string.
+          endpoint = '/api/nanobanana/generate';
+          const sanitizedAppName = sanitizeForPrompt(formData.appName);
+          const sanitizedDescription = sanitizeForPrompt(formData.appDescription);
+          const sanitizedIntro = sanitizeForPrompt(formData.appIntroduction);
+          const sanitizedCategory = sanitizeForPrompt(formData.primaryCategory);
 
-          prompt = [
-            `Feature showcase image for "${sanitizedAppName}" app`,
-            `Highlighting: "${sanitizedFeature}"`,
-            sanitizedCategory ? `Category: ${sanitizedCategory}` : '',
-            sanitizedDescription ? `App description: ${sanitizedDescription.slice(0, 100)}` : '',
-            'Style: modern UI mockup, clean interface design, professional dashboard visualization',
-            'high contrast, clear visual hierarchy, 16:9 aspect ratio',
-            'suitable for app store feature gallery',
-          ]
-            .filter(Boolean)
-            .join('. ');
+          if (imageToRegenerate.type === 'icon') {
+            const appContext = [
+              sanitizedDescription,
+              sanitizedIntro,
+              sanitizedCategory ? `Category: ${sanitizedCategory}` : '',
+            ]
+              .filter(Boolean)
+              .join('. ');
 
-          requestBody = {
-            type: 'feature',
-            prompt,
-            featureHighlight: featureText,
-            style: 'modern',
-          };
+            requestBody = {
+              type: 'icon',
+              prompt: [
+                `Professional app icon for "${sanitizedAppName}"`,
+                sanitizedCategory ? `a ${sanitizedCategory} application` : '',
+                appContext ? `Context: ${appContext.slice(0, 150)}` : '',
+                'Style: modern, flat design, minimalist, simple geometric shapes',
+                'high contrast, vibrant colors, single focal point, centered composition',
+                'suitable for app store listing',
+              ]
+                .filter(Boolean)
+                .join('. '),
+              style: 'modern',
+            };
+          } else {
+            const sanitizedFeature = sanitizeForPrompt(featureText);
+            requestBody = {
+              type: 'feature',
+              prompt: [
+                `Feature showcase image for "${sanitizedAppName}" app`,
+                `Highlighting: "${sanitizedFeature}"`,
+                sanitizedCategory ? `Category: ${sanitizedCategory}` : '',
+                sanitizedDescription
+                  ? `App description: ${sanitizedDescription.slice(0, 100)}`
+                  : '',
+                'Style: modern UI mockup, clean interface design, professional dashboard visualization',
+                'high contrast, clear visual hierarchy, 16:9 aspect ratio',
+                'suitable for app store feature gallery',
+              ]
+                .filter(Boolean)
+                .join('. '),
+              featureHighlight: featureText,
+              style: 'modern',
+            };
+          }
         }
 
-        const response = await apiFetch('/api/nanobanana/generate', {
+        const response = await apiFetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
@@ -633,7 +627,7 @@ export default function DashboardPage() {
 
         const data = await response.json();
         if (data.image) {
-          // Update the specific image in state
+          // Update the specific image in state, preserving provider/featureText.
           setImages((prevImages) =>
             prevImages.map((img) =>
               img.id === id
@@ -643,6 +637,7 @@ export default function DashboardPage() {
                     url: data.image.url,
                     width: data.image.width || img.width,
                     height: data.image.height || img.height,
+                    featureText: data.image.featureText ?? img.featureText,
                   }
                 : img
             )
@@ -669,13 +664,33 @@ export default function DashboardPage() {
   );
 
   const handleDownloadImage = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const image = images.find((img) => img.id === id);
-      if (image) {
-        window.open(image.url, '_blank');
+      if (!image) return;
+
+      try {
+        // Fetch the stored PNG bytes and save via an anchor+Blob (works for the
+        // same-origin /api/images/<id> URL; window.open(data:) was being blocked).
+        const response = await apiFetch(image.url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image (${response.status})`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        const base = formData.appName.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'shopgenfy';
+        link.download =
+          image.type === 'icon' ? `${base}-icon.png` : `${base}-feature-${image.id.slice(-6)}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        setError('Failed to download image. Please try again.');
       }
     },
-    [images]
+    [images, formData.appName]
   );
 
   // Memoized form handlers for performance
@@ -756,7 +771,9 @@ export default function DashboardPage() {
     if (!hasUserInteractedRef.current) return;
     if (!formData.appName && !formData.appIntroduction && !formData.appDescription) return;
 
-    // Create preview data matching the PreviewFormData interface
+    // Create preview data matching the PreviewFormData interface. Images are
+    // carried as lightweight refs (ids/urls only) so the preview page can
+    // rehydrate the gallery from the store without persisting any bytes.
     const previewData: PreviewFormData = {
       landingPageUrl: formData.landingPageUrl,
       appName: formData.appName,
@@ -768,10 +785,16 @@ export default function DashboardPage() {
       primaryCategory: formData.primaryCategory,
       secondaryCategory: formData.secondaryCategory,
       pricing: formData.pricing,
+      imageRefs: images.map((img) => ({
+        id: img.id,
+        url: img.url,
+        type: img.type,
+        altText: img.alt,
+      })),
     };
 
     saveToPreview(previewData);
-  }, [formData, saveToPreview]);
+  }, [formData, images, saveToPreview]);
 
   const progress = calculateProgress();
 

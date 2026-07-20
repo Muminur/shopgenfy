@@ -1,4 +1,4 @@
-import { SHOPIFY_LIMITS } from './validators/constants';
+import { SHOPIFY_LIMITS, SHOPIFY_CATEGORIES } from './validators/constants';
 import {
   fetchWebpageWithImages,
   WebpageFetchError,
@@ -163,6 +163,30 @@ async function fetchWithRetry(
 function truncateToLimit(text: string, limit: number): string {
   if (text.length <= limit) return text;
   return text.substring(0, limit - 3) + '...';
+}
+
+/**
+ * Coerce a model-supplied category label to a canonical Shopify category so an
+ * approximate value from analysis can never poison the form's category select.
+ *
+ * Matching order: exact (case-insensitive) → prefix in either direction
+ * (canonical starts with the raw label, e.g. `"Sales"` → `"Sales and
+ * conversion"`, or the raw label starts with a canonical, e.g.
+ * `"Marketing and SEO"` → `"Marketing"`) → empty string when nothing fits.
+ */
+export function matchShopifyCategory(raw?: string): string {
+  if (!raw) return '';
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) return '';
+
+  const exact = SHOPIFY_CATEGORIES.find((c) => c.toLowerCase() === normalized);
+  if (exact) return exact;
+
+  const prefix = SHOPIFY_CATEGORIES.find((c) => {
+    const lower = c.toLowerCase();
+    return lower.startsWith(normalized) || normalized.startsWith(lower);
+  });
+  return prefix ?? '';
 }
 
 export function createGeminiClient(apiKey: string): GeminiClient {
@@ -454,7 +478,7 @@ Return ONLY the JSON object, no other text.`;
         truncateToLimit(f, SHOPIFY_LIMITS.FEATURE_ITEM_MAX)
       ),
       languages: analysis.languages || ['en'],
-      primaryCategory: analysis.primaryCategory || 'Store design',
+      primaryCategory: matchShopifyCategory(analysis.primaryCategory),
       featureTags: (analysis.featureTags || []).slice(0, SHOPIFY_LIMITS.FEATURE_TAGS_MAX_ITEMS),
       pricing: analysis.pricing || { type: 'free' },
       confidence: Math.min(1, Math.max(0, analysis.confidence || 0)),

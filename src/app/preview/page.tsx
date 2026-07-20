@@ -52,6 +52,59 @@ function previewDataToSubmission(data: PreviewFormData): Submission {
   };
 }
 
+/**
+ * Map the raw GET /api/submissions/[id] document (Mongo `_id`, `featureList`)
+ * onto the client display shape (`id`, `features`).
+ */
+function apiSubmissionToDisplay(data: Record<string, unknown>): Submission {
+  const featureList = (data.features ?? data.featureList ?? []) as string[];
+  return {
+    id: (data.id as string) ?? (data._id as string) ?? 'draft',
+    appName: (data.appName as string) ?? '',
+    appIntroduction: (data.appIntroduction as string) ?? '',
+    appDescription: (data.appDescription as string) ?? '',
+    features: featureList.filter((f) => typeof f === 'string' && f.trim().length > 0),
+    landingPageUrl: (data.landingPageUrl as string) ?? '',
+    status: ((data.status as Submission['status']) ?? 'draft') as Submission['status'],
+    createdAt: (data.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: (data.updatedAt as string) ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Map GET /api/images StoredImage records (`altText`) onto the display shape
+ * (`alt`), tolerating either key.
+ */
+function apiImagesToDisplay(images: Record<string, unknown>[] | undefined): GeneratedImage[] {
+  return (images ?? []).map((img) => ({
+    id: img.id as string,
+    url: img.url as string,
+    type: (img.type as 'icon' | 'feature') ?? 'feature',
+    width: (img.width as number) ?? 0,
+    height: (img.height as number) ?? 0,
+    alt: (img.alt as string) ?? (img.altText as string) ?? '',
+  }));
+}
+
+/**
+ * Rehydrate images from the lightweight preview `imageRefs` (ids/urls only).
+ * The store guarantees exact Shopify dimensions, so type-based defaults are
+ * accurate for the caption without carrying dimensions in the ref payload.
+ */
+function imageRefsToDisplay(refs: PreviewFormData['imageRefs']): GeneratedImage[] {
+  return (refs ?? []).map((ref) => {
+    const isIcon = ref.type === 'icon';
+    return {
+      id: ref.id,
+      url: ref.url,
+      type: isIcon ? 'icon' : 'feature',
+      width: isIcon ? 1200 : 1600,
+      height: isIcon ? 1200 : 900,
+      alt: ref.altText ?? '',
+    };
+  });
+}
+
 function PreviewContent() {
   const searchParams = useSearchParams();
   const submissionId = searchParams.get('id');
@@ -70,6 +123,7 @@ function PreviewContent() {
         // Update submission when data changes from another tab
         if (isLiveMode) {
           setSubmission(previewDataToSubmission(data));
+          setImages(imageRefsToDisplay(data.imageRefs));
         }
       },
     });
@@ -92,13 +146,13 @@ function PreviewContent() {
             return;
           }
           const submissionData = await submissionRes.json();
-          setSubmission(submissionData);
+          setSubmission(apiSubmissionToDisplay(submissionData));
 
-          // Fetch images
+          // Fetch images (StoredImage records — map altText → alt for display)
           const imagesRes = await apiFetch(`/api/images?submissionId=${submissionId}`);
           if (imagesRes.ok) {
             const imagesData = await imagesRes.json();
-            setImages(imagesData.images || []);
+            setImages(apiImagesToDisplay(imagesData.images));
           }
         } catch {
           setError('Failed to load preview data');
@@ -113,6 +167,7 @@ function PreviewContent() {
         const previewData = loadFromPreview();
         if (previewData) {
           setSubmission(previewDataToSubmission(previewData));
+          setImages(imageRefsToDisplay(previewData.imageRefs));
           setIsLiveMode(true);
           enableLivePreview();
         } else {
@@ -142,6 +197,7 @@ function PreviewContent() {
       const previewData = loadFromPreview();
       if (previewData) {
         setSubmission(previewDataToSubmission(previewData));
+        setImages(imageRefsToDisplay(previewData.imageRefs));
       }
     }, 1000); // Check every second
 

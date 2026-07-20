@@ -3,6 +3,7 @@ import {
   GeminiClient,
   createGeminiClient,
   GeminiError,
+  matchShopifyCategory,
   type GeminiModel,
   type GeminiGenerateOptions,
   type GeminiAnalysisResult,
@@ -477,6 +478,81 @@ describe('GeminiClient', () => {
 
       expect(result.appName.length).toBeLessThanOrEqual(30);
     });
+
+    it('fuzzy-matches the primaryCategory to a canonical Shopify category', async () => {
+      const mockAnalysis = {
+        appName: 'Sales Booster',
+        appIntroduction: 'Boost sales',
+        appDescription: 'Helps merchants sell more.',
+        featureList: ['Upsell'],
+        languages: ['en'],
+        // Model returned a loose label — must resolve to the canonical value.
+        primaryCategory: 'Sales',
+        featureTags: [],
+        pricing: { type: 'free' },
+        confidence: 0.9,
+      };
+
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: { parts: [{ text: JSON.stringify(mockAnalysis) }], role: 'model' },
+                finishReason: 'STOP',
+              },
+            ],
+          }),
+      });
+
+      const result = await client.analyzeUrl('https://example.com');
+
+      expect(result.primaryCategory).toBe('Sales and conversion');
+    });
+
+    it('drops an unrecognized primaryCategory to an empty string', async () => {
+      const mockAnalysis = {
+        appName: 'Weird App',
+        appIntroduction: 'Does weird things',
+        appDescription: 'An app that does not fit any category.',
+        featureList: ['Weirdness'],
+        languages: ['en'],
+        primaryCategory: 'Totally Made Up Category',
+        featureTags: [],
+        pricing: { type: 'free' },
+        confidence: 0.9,
+      };
+
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: { parts: [{ text: JSON.stringify(mockAnalysis) }], role: 'model' },
+                finishReason: 'STOP',
+              },
+            ],
+          }),
+      });
+
+      const result = await client.analyzeUrl('https://example.com');
+
+      expect(result.primaryCategory).toBe('');
+    });
   });
 
   describe('error handling', () => {
@@ -529,5 +605,32 @@ describe('GeminiClient', () => {
         expect((error as GeminiError).requestId).toBe('req-123');
       }
     });
+  });
+});
+
+describe('matchShopifyCategory', () => {
+  it('returns the canonical value for an exact case-insensitive match', () => {
+    expect(matchShopifyCategory('Store design')).toBe('Store design');
+    expect(matchShopifyCategory('store design')).toBe('Store design');
+    expect(matchShopifyCategory('  MARKETING  ')).toBe('Marketing');
+  });
+
+  it('resolves a prefix of a canonical category (canonical startsWith raw)', () => {
+    expect(matchShopifyCategory('Sales')).toBe('Sales and conversion');
+    expect(matchShopifyCategory('Orders')).toBe('Orders and shipping');
+  });
+
+  it('resolves a label that starts with a canonical category (raw startsWith canonical)', () => {
+    expect(matchShopifyCategory('Marketing and SEO')).toBe('Marketing');
+  });
+
+  it('returns an empty string for an unrecognized category', () => {
+    expect(matchShopifyCategory('Totally Made Up Category')).toBe('');
+  });
+
+  it('returns an empty string for empty or missing input', () => {
+    expect(matchShopifyCategory('')).toBe('');
+    expect(matchShopifyCategory(undefined)).toBe('');
+    expect(matchShopifyCategory('   ')).toBe('');
   });
 });

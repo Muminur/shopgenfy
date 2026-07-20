@@ -1,7 +1,13 @@
+// @vitest-environment node
+// Runs under the node environment (not jsdom): adm-zip's central-directory
+// parser returns no entries under jsdom, and the export route runs in the node
+// runtime in production anyway.
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { MongoClient, Db, ObjectId } from 'mongodb';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { NextRequest } from 'next/server';
+import AdmZip from 'adm-zip';
+import { imageStore } from '@/lib/image-store';
 
 // Mock the mongodb module
 let mockDb: Db;
@@ -125,6 +131,54 @@ describe('Export API Route', () => {
       expect(response.headers.get('Content-Type')).toBe('application/zip');
       expect(response.headers.get('Content-Disposition')).toContain('attachment');
       expect(response.headers.get('Content-Disposition')).toContain('.zip');
+    });
+
+    it('embeds real PNG bytes from the image store for the submission', async () => {
+      imageStore.clear();
+      const submissionId = new ObjectId();
+      await mockDb.collection('submissions').insertOne({
+        _id: submissionId,
+        appName: 'Store Embed App',
+        appIntroduction: 'Embed test',
+        appDescription: 'Testing store-byte embedding.',
+        featureList: ['Feature 1'],
+        languages: ['en'],
+        primaryCategory: 'Productivity',
+        featureTags: [],
+        pricing: { type: 'free' },
+        landingPageUrl: 'https://example.com',
+        status: 'complete',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      imageStore.put({
+        buffer: Buffer.concat([pngSignature, Buffer.from('icon-bytes')]),
+        width: 1200,
+        height: 1200,
+        type: 'icon',
+        altText: 'App icon',
+        provider: 'gemini',
+        submissionId: submissionId.toString(),
+      });
+
+      const request = new NextRequest(`http://localhost/api/export/${submissionId.toString()}`);
+      const response = await GET(request, {
+        params: Promise.resolve({ id: submissionId.toString() }),
+      });
+
+      expect(response.status).toBe(200);
+      const zip = new AdmZip(Buffer.from(await response.arrayBuffer()));
+      const iconEntry = zip.getEntry('images/icon.png');
+      expect(iconEntry).not.toBeNull();
+      expect(iconEntry!.getData().subarray(0, 8).equals(pngSignature)).toBe(true);
+
+      const metadata = JSON.parse(zip.getEntry('metadata.json')!.getData().toString('utf8'));
+      expect(metadata.embeddedImages).toHaveLength(1);
+      expect(metadata.embeddedImages[0].file).toBe('images/icon.png');
+
+      imageStore.clear();
     });
 
     it('should include metadata.json in export', async () => {

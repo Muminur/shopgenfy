@@ -31,19 +31,23 @@ vi.mock('next/image', () => ({
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+// Mirrors the real GET /api/submissions/[id] document shape: Mongo `_id` and
+// `featureList` (NOT the client-facing `id`/`features`). The preview page must
+// map these before rendering.
 const mockSubmission = {
-  id: 'test-submission-id',
+  _id: 'test-submission-id',
   appName: 'Test App',
   appIntroduction: 'A great test app for testing',
   appDescription:
     'This is a detailed description of the test app that explains all its features and benefits for users.',
-  features: ['Feature 1', 'Feature 2', 'Feature 3'],
+  featureList: ['Feature 1', 'Feature 2', 'Feature 3'],
   landingPageUrl: 'https://test-app.com',
   status: 'complete',
   createdAt: '2024-01-01T00:00:00Z',
   updatedAt: '2024-01-02T00:00:00Z',
 };
 
+// Mirrors the real GET /api/images StoredImage shape: `altText` (not `alt`).
 const mockImages = [
   {
     id: 'img-1',
@@ -51,7 +55,8 @@ const mockImages = [
     type: 'icon',
     width: 1200,
     height: 1200,
-    alt: 'App icon',
+    altText: 'App icon',
+    provider: 'gemini',
   },
   {
     id: 'img-2',
@@ -59,7 +64,8 @@ const mockImages = [
     type: 'feature',
     width: 1600,
     height: 900,
-    alt: 'Feature 1 image',
+    altText: 'Feature 1 image',
+    provider: 'gemini',
   },
 ];
 

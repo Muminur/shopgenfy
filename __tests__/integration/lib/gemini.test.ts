@@ -506,7 +506,10 @@ describe('Gemini API Client - Integration Tests', () => {
       expect(result.appName).toBe('Partial App');
       expect(result.appIntroduction).toBe('');
       expect(result.languages).toEqual(['en']);
-      expect(result.primaryCategory).toBe('Store design');
+      // A missing/unrecognized category now resolves to '' (fuzzy-matched
+      // against SHOPIFY_CATEGORIES) instead of silently defaulting to a real
+      // category, so an approximate analysis can't poison the form's select.
+      expect(result.primaryCategory).toBe('');
       expect(result.pricing).toEqual({ type: 'free' });
     });
 
