@@ -12,7 +12,6 @@ describe('Health Check API Route', () => {
     // Set up default environment variables using vi.stubEnv
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-    vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
     vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
     vi.stubEnv('MONGODB_DB_NAME', 'test_db');
   });
