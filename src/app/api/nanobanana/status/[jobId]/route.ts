@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const apiKey = process.env.NANO_BANANA_API_KEY;
 
   if (!apiKey) {
-    return NextResponse.json({ error: 'Nano Banana API key not configured' }, { status: 500 });
+    return NextResponse.json({ error: 'Pollinations AI service not configured' }, { status: 500 });
   }
 
   const { jobId } = await params;

@@ -51,12 +51,8 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse;
   }
 
-  const apiKey = process.env.NANO_BANANA_API_KEY;
-
-  if (!apiKey) {
-    console.error('NANO_BANANA_API_KEY environment variable not configured');
-    return NextResponse.json({ error: 'Image generation service unavailable' }, { status: 503 });
-  }
+  // Pollinations AI is FREE and doesn't require an API key
+  // We keep this for backwards compatibility but don't enforce it
 
   let body: unknown;
   try {
@@ -107,8 +103,8 @@ export async function POST(request: NextRequest) {
       featureHighlight: prompt.featureHighlighted,
     }));
 
-    // Call Nano Banana batch generation
-    const client = createNanoBananaClient(apiKey);
+    // Call Pollinations AI batch generation (FREE API - no key needed)
+    const client = createNanoBananaClient();
     const results = await client.generateBatch(imageRequests);
 
     // Store generated images in database

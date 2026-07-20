@@ -61,7 +61,11 @@ describe('Nano Banana API Routes', () => {
       const data = await response.json();
       expect(data.jobId).toBe('job-123');
       expect(data.status).toBe('completed');
-      expect(data.imageUrl).toBeDefined();
+      expect(data.image).toBeDefined();
+      expect(data.image.url).toBe('https://cdn.nanobanana.io/images/job-123.png');
+      expect(data.image.id).toBe('job-123');
+      expect(data.image.width).toBe(1200);
+      expect(data.image.height).toBe(1200);
     });
 
     it('should return 400 for missing type', async () => {
@@ -147,6 +151,8 @@ describe('Nano Banana API Routes', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.jobId).toBeDefined();
+      expect(data.image).toBeDefined();
+      expect(data.image.url).toBeDefined();
     });
 
     it('should return 500 when generation fails', async () => {
@@ -200,8 +206,9 @@ describe('Nano Banana API Routes', () => {
 
       expect(response.status).toBe(200);
       const data = await response.json();
-      expect(data.width).toBe(1600);
-      expect(data.height).toBe(900);
+      expect(data.image).toBeDefined();
+      expect(data.image.width).toBe(1600);
+      expect(data.image.height).toBe(900);
     });
   });
 

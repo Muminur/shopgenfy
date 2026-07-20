@@ -41,7 +41,20 @@ export async function POST(request: NextRequest) {
     const client = createNanoBananaClient();
     const result = await client.generateImage(parseResult.data);
 
-    return NextResponse.json(result);
+    // Transform response to match expected frontend format
+    const response = {
+      image: {
+        id: result.jobId,
+        url: result.imageUrl,
+        width: result.width,
+        height: result.height,
+        altText: `Generated ${parseResult.data.type} image`,
+      },
+      jobId: result.jobId,
+      status: result.status,
+    };
+
+    return NextResponse.json(response);
   } catch (error) {
     if (error instanceof NanoBananaError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode || 500 });
