@@ -17,11 +17,16 @@ import { AlertMessage } from '@/components/feedback/AlertMessage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Sparkles,
   Download,
   Save,
   Globe,
+  Github,
+  FolderUp,
   ImageIcon,
   Loader2,
   Languages,
@@ -33,6 +38,18 @@ import { SUPPORTED_LANGUAGES, SHOPIFY_INTEGRATIONS } from '@/lib/validators/cons
 import { PricingConfig } from '@/types';
 import { usePreviewSync, PreviewFormData } from '@/hooks/usePreviewSync';
 import { apiFetch, saveDraft, SUBMISSION_ID_STORAGE_KEY } from '@/lib/api-client';
+import { cn } from '@/lib/utils';
+
+// Segmented-control tab trigger styling (active vs inactive), matching the
+// repo's muted-surface pattern. Hand-rolled to avoid a new radix dependency.
+function tabTriggerClass(active: boolean): string {
+  return cn(
+    'flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+    active
+      ? 'bg-background text-foreground shadow-sm'
+      : 'text-muted-foreground hover:text-foreground'
+  );
+}
 
 // Helper to sanitize text for image prompts - removes Shopify branding and URLs
 function sanitizeForPrompt(text: string): string {
@@ -124,15 +141,24 @@ export default function DashboardPage() {
   >([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  // Screenshots extracted from the landing page URL for Imagen feature image generation
+  // Screenshots extracted from any analyzed source (URL / GitHub repo / local
+  // source) for Imagen feature image generation. `url` is optional because
+  // GitHub and uploaded-zip screenshots carry only decoded bytes, no source URL.
   const [extractedScreenshots, setExtractedScreenshots] = useState<
     {
-      url: string;
+      url?: string;
       base64?: string;
       mimeType?: string;
       alt?: string;
     }[]
   >([]);
+
+  // Which input source the user is analyzing from. All three funnel through the
+  // shared applyAnalysis() result-application path.
+  const [inputTab, setInputTab] = useState<'url' | 'github' | 'source'>('url');
+  const [githubUrl, setGithubUrl] = useState('');
+  const [sourceText, setSourceText] = useState('');
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
 
   // Preview sync hook for real-time preview synchronization
   const { saveToPreview, lastSynced } = usePreviewSync({ debounceMs: 500 });
@@ -181,7 +207,51 @@ export default function DashboardPage() {
     setFormData((prev) => ({ ...prev, landingPageUrl: e.target.value }));
   }, []);
 
-  const handleAnalyze = useCallback(async () => {
+  // Shared result-application path used by all three input sources. Applies the
+  // exact same fields the URL path always has (API returns featureList, mapped
+  // to the form's features), and lands screenshots from any source in the same
+  // extractedScreenshots state.
+  const applyAnalysis = useCallback(
+    (data: {
+      appName?: string;
+      appIntroduction?: string;
+      appDescription?: string;
+      featureList?: string[];
+      languages?: string[];
+      primaryCategory?: string;
+      screenshots?: { url?: string; base64?: string; mimeType?: string; alt?: string }[];
+      warnings?: string[];
+    }) => {
+      setFormData((prev) => ({
+        ...prev,
+        appName: data.appName || prev.appName,
+        appIntroduction: data.appIntroduction || prev.appIntroduction,
+        appDescription: data.appDescription || prev.appDescription,
+        features:
+          data.featureList && data.featureList.length > 0 ? data.featureList : prev.features,
+        languages: data.languages && data.languages.length > 0 ? data.languages : prev.languages,
+        primaryCategory: data.primaryCategory || prev.primaryCategory,
+      }));
+
+      // Surface any degraded-path notes (retired-model fallback, prompt-only
+      // image fallback, etc.) so fallbacks are never silent.
+      const warningNote =
+        data.warnings && data.warnings.length > 0 ? ` Note: ${data.warnings.join(' ')}` : '';
+
+      if (data.screenshots && data.screenshots.length > 0) {
+        setExtractedScreenshots(data.screenshots);
+        setSuccess(
+          `Analyzed successfully! Found ${data.screenshots.length} screenshot(s) for feature image generation.${warningNote}`
+        );
+      } else {
+        setExtractedScreenshots([]);
+        setSuccess(`Analyzed successfully!${warningNote}`);
+      }
+    },
+    []
+  );
+
+  const handleAnalyzeUrl = useCallback(async () => {
     if (!formData.landingPageUrl) return;
 
     setIsAnalyzing(true);
@@ -191,43 +261,88 @@ export default function DashboardPage() {
       const response = await apiFetch('/api/gemini/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: formData.landingPageUrl }),
+        body: JSON.stringify({ url: formData.landingPageUrl, sourceType: 'url' }),
       });
 
       if (!response.ok) {
         throw new Error('Failed to analyze landing page');
       }
 
-      const data = await response.json();
-
-      // Auto-fill form with analyzed data
-      // Note: API returns featureList, we map it to features for form compatibility
-      setFormData((prev) => ({
-        ...prev,
-        appName: data.appName || prev.appName,
-        appIntroduction: data.appIntroduction || prev.appIntroduction,
-        appDescription: data.appDescription || prev.appDescription,
-        features: data.featureList?.length > 0 ? data.featureList : prev.features,
-        languages: data.languages?.length > 0 ? data.languages : prev.languages,
-        primaryCategory: data.primaryCategory || prev.primaryCategory,
-      }));
-
-      // Store extracted screenshots for later use with Imagen
-      if (data.screenshots && data.screenshots.length > 0) {
-        setExtractedScreenshots(data.screenshots);
-        setSuccess(
-          `Landing page analyzed! Found ${data.screenshots.length} screenshot(s) for feature image generation.`
-        );
-      } else {
-        setExtractedScreenshots([]);
-        setSuccess('Landing page analyzed successfully!');
-      }
+      applyAnalysis(await response.json());
     } catch {
       setError('Failed to analyze landing page. Please try again.');
     } finally {
       setIsAnalyzing(false);
     }
-  }, [formData.landingPageUrl]);
+  }, [formData.landingPageUrl, applyAnalysis]);
+
+  const handleAnalyzeGitHub = useCallback(async () => {
+    if (!githubUrl.trim()) return;
+
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      const response = await apiFetch('/api/gemini/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: githubUrl.trim(), sourceType: 'github' }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to analyze repository');
+      }
+
+      applyAnalysis(await response.json());
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to analyze the GitHub repository';
+      setError(`${message}. Please check the URL and try again.`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [githubUrl, applyAnalysis]);
+
+  const handleAnalyzeSource = useCallback(async () => {
+    if (!sourceFile && !sourceText.trim()) return;
+
+    setIsAnalyzing(true);
+    setError(null);
+
+    try {
+      // A zip upload goes as multipart form-data (field "file"); pasted text
+      // goes as JSON { text }. An uploaded file takes precedence when both exist.
+      let response: Response;
+      if (sourceFile) {
+        const form = new FormData();
+        form.append('file', sourceFile);
+        response = await apiFetch('/api/analyze/source', { method: 'POST', body: form });
+      } else {
+        response = await apiFetch('/api/analyze/source', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: sourceText }),
+        });
+      }
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to analyze source');
+      }
+
+      applyAnalysis(await response.json());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to analyze source';
+      setError(`${message}. Please try again.`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [sourceFile, sourceText, applyAnalysis]);
+
+  const handleSourceFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSourceFile(e.target.files?.[0] ?? null);
+  }, []);
 
   const handleGenerateImages = useCallback(async () => {
     setIsGeneratingImages(true);
@@ -844,42 +959,163 @@ export default function DashboardPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Left Column - Form */}
           <div className="space-y-6">
-            {/* URL Analysis */}
+            {/* Input Source Analysis — Website URL | GitHub Repo | Local Source.
+                All three funnel through the shared applyAnalysis() result path. */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Landing Page Analysis
+                  <Sparkles className="h-5 w-5" />
+                  Analyze Your App
                 </CardTitle>
                 <CardDescription>
-                  Enter your app landing page URL to auto-fill the form
+                  Import from a website, a GitHub repo, or local source to auto-fill the form
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <URLInput
-                  label="Landing Page URL"
-                  value={formData.landingPageUrl}
-                  onChange={handleUrlChange}
-                  showValidation
-                  placeholder="https://your-app.com"
-                />
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={!isUrlValid || isAnalyzing}
-                  className="w-full"
+                {/* Tab triggers (hand-rolled segmented control; role=tab keeps them
+                    out of getByRole('button') queries) */}
+                <div
+                  role="tablist"
+                  aria-label="Input source"
+                  className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1"
                 >
-                  {isAnalyzing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Analyze with AI
-                    </>
-                  )}
-                </Button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={inputTab === 'url'}
+                    onClick={() => setInputTab('url')}
+                    className={tabTriggerClass(inputTab === 'url')}
+                  >
+                    <Globe className="h-4 w-4" />
+                    Website URL
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={inputTab === 'github'}
+                    onClick={() => setInputTab('github')}
+                    className={tabTriggerClass(inputTab === 'github')}
+                  >
+                    <Github className="h-4 w-4" />
+                    GitHub Repo
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={inputTab === 'source'}
+                    onClick={() => setInputTab('source')}
+                    className={tabTriggerClass(inputTab === 'source')}
+                  >
+                    <FolderUp className="h-4 w-4" />
+                    Local Source
+                  </button>
+                </div>
+
+                {/* Website URL panel */}
+                {inputTab === 'url' && (
+                  <div role="tabpanel" className="space-y-4">
+                    <URLInput
+                      label="Landing Page URL"
+                      value={formData.landingPageUrl}
+                      onChange={handleUrlChange}
+                      showValidation
+                      placeholder="https://your-app.com"
+                    />
+                    <Button
+                      onClick={handleAnalyzeUrl}
+                      disabled={!isUrlValid || isAnalyzing}
+                      className="w-full"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Analyze with AI
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {/* GitHub Repo panel */}
+                {inputTab === 'github' && (
+                  <div role="tabpanel" className="space-y-4">
+                    <URLInput
+                      label="GitHub Repository URL"
+                      value={githubUrl}
+                      onChange={(e) => setGithubUrl(e.target.value)}
+                      showValidation
+                      placeholder="https://github.com/owner/repo"
+                      helperText="Public repositories work best. Set GITHUB_TOKEN to raise rate limits."
+                    />
+                    <Button
+                      onClick={handleAnalyzeGitHub}
+                      disabled={!githubUrl.trim() || isAnalyzing}
+                      className="w-full"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Github className="h-4 w-4 mr-2" />
+                          Analyze Repo
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Local Source panel */}
+                {inputTab === 'source' && (
+                  <div role="tabpanel" className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="source-zip">Upload source (.zip)</Label>
+                      <Input
+                        id="source-zip"
+                        type="file"
+                        accept=".zip,application/zip"
+                        onChange={handleSourceFileChange}
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        A zip of your project (README, docs, screenshots). Max 30 MB.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="source-text">Or paste a README / description</Label>
+                      <Textarea
+                        id="source-text"
+                        value={sourceText}
+                        onChange={(e) => setSourceText(e.target.value)}
+                        placeholder="Paste your app's README or a description of what it does..."
+                        rows={6}
+                      />
+                    </div>
+                    <Button
+                      onClick={handleAnalyzeSource}
+                      disabled={(!sourceFile && !sourceText.trim()) || isAnalyzing}
+                      className="w-full"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Analyze Source
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
