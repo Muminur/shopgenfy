@@ -35,6 +35,24 @@ vi.mock('@/lib/nanobanana', () => ({
   },
 }));
 
+// Batch route dependencies: DB + generated-image persistence are mocked;
+// prompt-generator runs for real so the featureList wiring is verified
+// end-to-end rather than against a mock.
+const findOneMock = vi.fn();
+const updateOneMock = vi.fn().mockResolvedValue({ acknowledged: true });
+vi.mock('@/lib/mongodb', () => ({
+  getDatabaseConnected: vi.fn(async () => ({
+    collection: vi.fn(() => ({
+      findOne: findOneMock,
+      updateOne: updateOneMock,
+    })),
+  })),
+}));
+
+vi.mock('@/lib/db/images', () => ({
+  createGeneratedImage: vi.fn(async (_db, input) => ({ _id: 'mock-image-id', ...input })),
+}));
+
 import { imageStore } from '@/lib/image-store';
 
 async function pngBytes(width: number, height: number): Promise<Buffer> {
@@ -193,6 +211,58 @@ describe('Nano Banana API Routes (store-backed)', () => {
       });
       const response = await POST(request);
       expect(response.status).toBe(502);
+    });
+  });
+
+  describe('POST /api/nanobanana/batch', () => {
+    it('reads submission.featureList (not the removed features field) for batch prompts', async () => {
+      const submissionId = '507f1f77bcf86cd799439011';
+      findOneMock.mockResolvedValue({
+        _id: submissionId,
+        appName: 'Test App',
+        appDescription: 'A helpful test app',
+        primaryCategory: 'Sales and conversion',
+        featureList: ['Live inventory sync', 'One-click reorder'],
+        status: 'draft',
+      });
+
+      const { createNanoBananaClient } = await import('@/lib/nanobanana');
+      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
+        generateBatch: vi
+          .fn()
+          .mockImplementation(async (requests: Array<{ type: 'icon' | 'feature' }>) =>
+            requests.map((req, i) => ({
+              jobId: `batch-job-${i}`,
+              status: 'completed' as const,
+              imageUrl: `https://image.pollinations.ai/prompt/mock-${i}`,
+              width: req.type === 'icon' ? 1200 : 1600,
+              height: req.type === 'icon' ? 1200 : 900,
+              format: 'png' as const,
+            }))
+          ),
+      });
+
+      const { POST } = await import('@/app/api/nanobanana/batch/route');
+      const request = new NextRequest('http://localhost/api/nanobanana/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+
+      // Regression guard for the migration-debris bug (spec item #5): the
+      // batch route used to read `submission.features`, a field the DB
+      // never writes (it stores `featureList`), so no feature prompt ever
+      // carried the submission's real feature text. With the fix, the
+      // submission's own features flow through into the generated prompts.
+      const highlighted = data.images.map(
+        (img: { featureHighlighted?: string }) => img.featureHighlighted
+      );
+      expect(highlighted).toContain('Live inventory sync');
+      expect(highlighted).toContain('One-click reorder');
     });
   });
 });
