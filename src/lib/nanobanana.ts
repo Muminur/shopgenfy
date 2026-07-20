@@ -1,9 +1,18 @@
 import { IMAGE_SPECS, FORBIDDEN_PATTERNS } from './validators/constants';
 import type { ImageType, ImageFormat } from './validators/image';
 
-const POLLINATIONS_API_BASE = 'https://image.pollinations.ai/prompt';
+const DEFAULT_POLLINATIONS_API_BASE = 'https://image.pollinations.ai/prompt';
 const DEFAULT_TIMEOUT = 120000;
 const MAX_PROMPT_LENGTH = 2000;
+
+/**
+ * Resolve the Pollinations base URL at call time so `POLLINATIONS_API_BASE`
+ * can be overridden in tests / hermetic E2E (points at a local stub).
+ * Defaults to the production endpoint.
+ */
+function getPollinationsApiBase(): string {
+  return process.env.POLLINATIONS_API_BASE || DEFAULT_POLLINATIONS_API_BASE;
+}
 
 export type { ImageType, ImageFormat };
 export type ImageStyle = 'flat' | 'modern' | 'gradient' | 'minimalist' | '3d';
@@ -140,7 +149,7 @@ export function createNanoBananaClient(_apiKey?: string): NanoBananaClient {
 
     // Build Pollinations.ai URL (FREE API - no authentication needed)
     const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    const pollinationsUrl = `${POLLINATIONS_API_BASE}/${encodedPrompt}?width=${dimensions.width}&height=${dimensions.height}&seed=${seed}&nologo=true&enhance=true`;
+    const pollinationsUrl = `${getPollinationsApiBase()}/${encodedPrompt}?width=${dimensions.width}&height=${dimensions.height}&seed=${seed}&nologo=true&enhance=true`;
 
     // Generate unique job ID for tracking
     const jobId = `pollinations-${request.type}-${Date.now()}-${seed}`;

@@ -664,7 +664,8 @@ describe('Gemini API Client - Integration Tests', () => {
       const requestBody = JSON.parse(fetchCall[1].body);
 
       expect(requestBody.generationConfig.temperature).toBe(0.3);
-      expect(requestBody.generationConfig.maxOutputTokens).toBe(4096);
+      expect(requestBody.generationConfig.maxOutputTokens).toBe(8192);
+      expect(requestBody.generationConfig.responseMimeType).toBe('application/json');
     });
   });
 

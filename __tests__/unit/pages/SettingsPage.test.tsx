@@ -62,7 +62,7 @@ describe('Settings Page', () => {
     it('should display available models', async () => {
       render(<SettingsPage />);
       await waitFor(() => {
-        expect(screen.getByText(/gemini 2\.0 flash/i)).toBeInTheDocument();
+        expect(screen.getByText(/gemini flash latest/i)).toBeInTheDocument();
       });
     });
   });

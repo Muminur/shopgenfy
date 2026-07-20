@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+// Base URLs are env-overridable (test seam for hermetic E2E); defaults are the
+// production endpoints. Note: this route appends `/prompt/...` to the
+// Pollinations base, so its default is origin-style (no `/prompt` suffix).
+const GEMINI_API_BASE =
+  process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta';
 // Pollinations.ai is a free API that requires no authentication
-const POLLINATIONS_API_BASE = 'https://image.pollinations.ai';
+const POLLINATIONS_API_BASE = process.env.POLLINATIONS_API_BASE || 'https://image.pollinations.ai';
 
 interface APIStatus {
   connected: boolean;

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { url?: string };
+  let body: { url?: string; model?: string };
   try {
     body = await request.json();
   } catch {
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const client = createGeminiClient(apiKey);
-    const analysis = await client.analyzeUrl(body.url);
+    const analysis = await client.analyzeUrl(body.url, { model: body.model });
 
     return NextResponse.json(analysis);
   } catch (error) {

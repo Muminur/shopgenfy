@@ -7,6 +7,7 @@ import {
   type GeminiGenerateOptions,
   type GeminiAnalysisResult,
 } from '@/lib/gemini';
+import { clearDeadModelCache } from '@/lib/model-resolver';
 
 // Mock the webpage-fetcher module
 vi.mock('@/lib/webpage-fetcher', () => ({
@@ -363,6 +364,75 @@ describe('GeminiClient', () => {
       await expect(client.analyzeUrl('https://example.com')).rejects.toThrow(
         'insufficient content'
       );
+    });
+
+    it('retries with the fallback model when the resolved model is retired', async () => {
+      clearDeadModelCache();
+
+      const mockAnalysis = {
+        appName: 'Recovered App',
+        appIntroduction: 'Works after fallback',
+        appDescription: 'The first model was retired but the fallback succeeded.',
+        featureList: ['Feature A'],
+        languages: ['en'],
+        primaryCategory: 'Store design',
+        featureTags: ['recovery'],
+        pricing: { type: 'free' as const },
+        confidence: 0.7,
+      };
+
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
+
+      global.fetch = vi
+        .fn()
+        // First attempt: the default resolved model (gemini-flash-latest) is retired
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+          headers: { get: () => null },
+          json: () =>
+            Promise.resolve({
+              error: {
+                code: 404,
+                status: 'NOT_FOUND',
+                message:
+                  'This model models/gemini-flash-latest is no longer available. Please see the docs for currently available models.',
+              },
+            }),
+        })
+        // Second attempt: the next candidate (gemini-3.5-flash) succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              candidates: [
+                {
+                  content: { parts: [{ text: JSON.stringify(mockAnalysis) }], role: 'model' },
+                  finishReason: 'STOP',
+                },
+              ],
+            }),
+        });
+
+      const result = await client.analyzeUrl('https://example.com/app');
+
+      const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[0][0]).toContain('gemini-flash-latest');
+      expect(fetchMock.mock.calls[1][0]).toContain('gemini-3.5-flash');
+
+      expect(result.appName).toBe('Recovered App');
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings).toContain(
+        'Model gemini-flash-latest unavailable; used gemini-3.5-flash'
+      );
+
+      clearDeadModelCache();
     });
 
     it('should apply Shopify limits to extracted content', async () => {

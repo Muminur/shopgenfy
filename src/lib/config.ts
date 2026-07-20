@@ -16,11 +16,14 @@ export const API_CONFIG = {
   },
 } as const;
 
-// Gemini API configuration
+// Gemini API configuration.
+// Base URL and models are overridable at runtime via the model-resolver /
+// GEMINI_API_BASE; these are documentation defaults reflecting the current
+// working model chain (retired 2.x IDs removed).
 export const GEMINI_CONFIG = {
   baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-  models: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'],
-  defaultModel: 'gemini-2.0-flash',
+  models: ['gemini-flash-latest', 'gemini-3.5-flash'],
+  defaultModel: 'gemini-flash-latest',
   endpoints: {
     models: '/models',
     generateContent: '/models/{model}:generateContent',

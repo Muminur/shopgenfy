@@ -21,28 +21,28 @@ interface Settings {
 }
 
 const defaultSettings: Settings = {
-  selectedModel: 'gemini-2.0-flash',
+  selectedModel: 'auto',
   theme: 'system',
   autoSave: true,
 };
 
 const availableModels = [
   {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash',
-    description: 'Fast and efficient for quick responses',
+    id: 'auto',
+    name: 'Auto',
+    description: 'Automatically use the best available model and self-heal if one is retired',
     recommended: true,
   },
   {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    description: 'Latest flash model with improved capabilities',
+    id: 'gemini-flash-latest',
+    name: 'Gemini Flash Latest',
+    description: 'Self-updating alias that always points at the current flash model',
     recommended: false,
   },
   {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    description: 'Most capable model with best quality outputs',
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash',
+    description: 'Pinned fast model for content analysis',
     recommended: false,
   },
 ];

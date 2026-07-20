@@ -108,7 +108,13 @@ export function createImagenClient(apiKey: string): ImagenClient {
     throw new ImagenError('API key is required');
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  // Test seam: point the SDK at a local stub in hermetic E2E via GEMINI_API_BASE.
+  // Left unset in production so the SDK uses its own default endpoint.
+  const baseUrl = process.env.GEMINI_API_BASE;
+  const ai = new GoogleGenAI({
+    apiKey,
+    ...(baseUrl ? { httpOptions: { baseUrl } } : {}),
+  });
 
   async function generateImages(options: ImagenGenerateOptions): Promise<ImagenGenerateResult> {
     const { prompt, type, numberOfImages = 1, negativePrompt } = options;

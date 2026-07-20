@@ -104,7 +104,7 @@ export async function getOrCreateUser(db: Db, email: string): Promise<UserDocume
 
   return createUser(db, {
     email,
-    selectedGeminiModel: 'gemini-2.0-flash',
+    selectedGeminiModel: 'auto',
     theme: 'light',
     autoSave: true,
   });

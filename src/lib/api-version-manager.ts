@@ -1,6 +1,7 @@
 import type { Db } from 'mongodb';
 import type { GeminiClient, GeminiModel } from './gemini';
 import type { NanoBananaClient, VersionInfo } from './nanobanana';
+import { resolveTextModel } from './model-resolver';
 import {
   getAPIVersionByService,
   createAPIVersion,
@@ -241,7 +242,7 @@ export function createAPIVersionManager(
 
       try {
         await geminiClient.generateContent('Health check', {
-          model: 'gemini-2.0-flash',
+          model: resolveTextModel(),
           temperature: 0.1,
           maxOutputTokens: 10,
         });

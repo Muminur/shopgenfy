@@ -5,11 +5,20 @@ import {
   ExtractedImage,
   fetchImageAsBase64,
 } from './webpage-fetcher';
+import { resolveTextModel, markModelDead, isModelRetiredError } from './model-resolver';
 
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const DEFAULT_GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000;
+
+/**
+ * Resolve the Gemini REST base URL at call time so `GEMINI_API_BASE` can be
+ * overridden in tests / hermetic E2E (points at a local stub). Defaults to the
+ * production endpoint.
+ */
+function getGeminiApiBase(): string {
+  return process.env.GEMINI_API_BASE || DEFAULT_GEMINI_API_BASE;
+}
 
 export interface GeminiModel {
   name: string;
@@ -27,6 +36,7 @@ export interface GeminiGenerateOptions {
   topP?: number;
   topK?: number;
   stopSequences?: string[];
+  responseMimeType?: string;
 }
 
 export interface GeminiGenerateResult {
@@ -69,6 +79,11 @@ export interface GeminiAnalysisResult {
   };
   confidence: number;
   screenshots: ExtractedScreenshot[];
+  /**
+   * Human-readable notes about degraded behavior (e.g. a retired model was
+   * skipped in favor of a fallback). Empty when the primary path succeeded.
+   */
+  warnings?: string[];
 }
 
 export class GeminiError extends Error {
@@ -89,7 +104,7 @@ export interface GeminiClient {
     prompt: string,
     options?: GeminiGenerateOptions
   ): AsyncGenerator<GeminiStreamChunk>;
-  analyzeUrl(url: string): Promise<GeminiAnalysisResult>;
+  analyzeUrl(url: string, options?: { model?: string }): Promise<GeminiAnalysisResult>;
 }
 
 async function fetchWithRetry(
@@ -161,7 +176,7 @@ export function createGeminiClient(apiKey: string): GeminiClient {
   };
 
   async function listModels(options?: { filter?: string }): Promise<GeminiModel[]> {
-    const url = `${GEMINI_API_BASE}/models`;
+    const url = `${getGeminiApiBase()}/models`;
 
     const response = await fetchWithRetry(url, {
       method: 'GET',
@@ -184,8 +199,8 @@ export function createGeminiClient(apiKey: string): GeminiClient {
     prompt: string,
     options: GeminiGenerateOptions = {}
   ): Promise<GeminiGenerateResult> {
-    const model = options.model || DEFAULT_MODEL;
-    const url = `${GEMINI_API_BASE}/models/${model}:generateContent`;
+    const model = resolveTextModel(options.model);
+    const url = `${getGeminiApiBase()}/models/${model}:generateContent`;
 
     const requestBody = {
       contents: [
@@ -199,6 +214,7 @@ export function createGeminiClient(apiKey: string): GeminiClient {
         topP: options.topP ?? 0.95,
         topK: options.topK ?? 40,
         stopSequences: options.stopSequences,
+        ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
       },
     };
 
@@ -242,8 +258,8 @@ export function createGeminiClient(apiKey: string): GeminiClient {
     prompt: string,
     options: GeminiGenerateOptions = {}
   ): AsyncGenerator<GeminiStreamChunk> {
-    const model = options.model || DEFAULT_MODEL;
-    const url = `${GEMINI_API_BASE}/models/${model}:streamGenerateContent?alt=sse`;
+    const model = resolveTextModel(options.model);
+    const url = `${getGeminiApiBase()}/models/${model}:streamGenerateContent?alt=sse`;
 
     const requestBody = {
       contents: [
@@ -305,7 +321,10 @@ export function createGeminiClient(apiKey: string): GeminiClient {
     }
   }
 
-  async function analyzeUrl(url: string): Promise<GeminiAnalysisResult> {
+  async function analyzeUrl(
+    url: string,
+    options?: { model?: string }
+  ): Promise<GeminiAnalysisResult> {
     try {
       new URL(url);
     } catch {
@@ -316,9 +335,9 @@ export function createGeminiClient(apiKey: string): GeminiClient {
     let pageContent: string;
     let extractedImages: ExtractedImage[] = [];
     try {
-      const result = await fetchWebpageWithImages(url, { maxLength: 12000 });
-      pageContent = result.text;
-      extractedImages = result.images;
+      const fetched = await fetchWebpageWithImages(url, { maxLength: 12000 });
+      pageContent = fetched.text;
+      extractedImages = fetched.images;
     } catch (error) {
       if (error instanceof WebpageFetchError) {
         throw new GeminiError(`Failed to fetch page: ${error.message}`, error.statusCode);
@@ -357,11 +376,40 @@ Ensure all content follows Shopify App Store guidelines:
 
 Return ONLY the JSON object, no other text.`;
 
-    const result = await generateContent(prompt, {
-      model: DEFAULT_MODEL,
+    const warnings: string[] = [];
+
+    // JSON-hardened generation config: enforce a JSON response and give the
+    // model enough output budget for the full listing. No thinking config —
+    // 3.x models reject a blanket thinkingBudget.
+    const generationOptions: GeminiGenerateOptions = {
       temperature: 0.3,
-      maxOutputTokens: 4096,
-    });
+      maxOutputTokens: 8192,
+      responseMimeType: 'application/json',
+    };
+
+    // Resolve the text model dynamically. If the resolved model has been
+    // retired upstream, mark it dead and retry once with the next candidate so
+    // the analysis self-heals across Google's rolling model deprecations.
+    const model = resolveTextModel(options?.model);
+    let result: GeminiGenerateResult;
+    try {
+      result = await generateContent(prompt, { ...generationOptions, model });
+    } catch (error) {
+      if (
+        error instanceof GeminiError &&
+        isModelRetiredError(error.statusCode ?? 0, error.message)
+      ) {
+        markModelDead(model);
+        const fallback = resolveTextModel(options?.model);
+        if (fallback === model) {
+          throw error;
+        }
+        warnings.push(`Model ${model} unavailable; used ${fallback}`);
+        result = await generateContent(prompt, { ...generationOptions, model: fallback });
+      } else {
+        throw error;
+      }
+    }
 
     let analysis: Omit<GeminiAnalysisResult, 'screenshots'>;
     try {
@@ -411,6 +459,7 @@ Return ONLY the JSON object, no other text.`;
       pricing: analysis.pricing || { type: 'free' },
       confidence: Math.min(1, Math.max(0, analysis.confidence || 0)),
       screenshots: validScreenshots,
+      warnings,
     };
   }
 
