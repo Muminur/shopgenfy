@@ -167,7 +167,33 @@ describe('Rate Limiter Middleware', () => {
       });
 
       const response = await rateLimiter(request);
-      expect(response).toBeNull(); // Should extract first IP
+      expect(response).toBeNull(); // Should extract an IP from the chain and allow
+    });
+
+    it('keys on the rightmost x-forwarded-for hop so a spoofed leftmost IP cannot reset the bucket', async () => {
+      const config: RateLimitConfig = {
+        requests: 1,
+        windowMs: 60000,
+      };
+
+      const rateLimiter = createRateLimiter(config);
+
+      // First request: attacker-controlled leftmost hop is 1.1.1.1; the trusted
+      // proxy (e.g. Vercel) appended the real client address 9.9.9.9 on the right.
+      const first = new NextRequest('http://localhost:3000/api/test', {
+        headers: { 'x-forwarded-for': '1.1.1.1, 9.9.9.9' },
+      });
+      expect(await rateLimiter(first)).toBeNull();
+
+      // Second request: the attacker rotates the spoofable leftmost hop to a
+      // fresh value, but the rightmost (trusted) hop is still 9.9.9.9. With
+      // leftmost keying this would land in a new bucket and be allowed; with
+      // rightmost keying it hits the SAME bucket and is blocked.
+      const second = new NextRequest('http://localhost:3000/api/test', {
+        headers: { 'x-forwarded-for': '2.2.2.2, 9.9.9.9' },
+      });
+      const response = await rateLimiter(second);
+      expect(response?.status).toBe(429);
     });
 
     it('should fallback to localhost if no IP header', async () => {
