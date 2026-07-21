@@ -84,7 +84,10 @@ const nextConfig = {
         ],
       },
       {
-        source: '/api/:path*',
+        // Excludes /api/images/* so the store route's own
+        // `Cache-Control: private, max-age=86400` (spec Task 5) is not
+        // overwritten by this blanket no-store rule.
+        source: '/api/((?!images).*)',
         headers: [
           {
             key: 'Cache-Control',

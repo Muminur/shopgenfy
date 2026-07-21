@@ -31,7 +31,7 @@
       ]
     },
     {
-      "source": "/api/:path*",
+      "source": "/api/((?!images).*)",
       "headers": [
         {
           "key": "Cache-Control",
