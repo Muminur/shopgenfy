@@ -202,10 +202,6 @@ export const rateLimitConfigs = {
       requests: 5,
       windowMs: 60000, // 1 minute (expensive operation)
     } as RateLimitConfig,
-    status: {
-      requests: 60,
-      windowMs: 60000, // 1 minute (lightweight polling)
-    } as RateLimitConfig,
     batch: {
       requests: 2,
       windowMs: 60000, // 1 minute (very expensive)

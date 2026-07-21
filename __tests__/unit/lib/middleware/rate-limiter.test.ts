@@ -4,6 +4,7 @@ import {
   createRateLimiter,
   RateLimitConfig,
   clearRateLimitStore,
+  rateLimitConfigs,
 } from '@/lib/middleware/rate-limiter';
 
 describe('Rate Limiter Middleware', () => {
@@ -434,6 +435,19 @@ describe('Rate Limiter Middleware', () => {
       // Skip request still allowed
       response = await rateLimiter(skipRequest);
       expect(response).toBeNull();
+    });
+  });
+
+  describe('Predefined Rate Limit Configurations', () => {
+    it('should not have a stale nanobanana.status config (route deleted)', () => {
+      expect(rateLimitConfigs.nanobanana).not.toHaveProperty('status');
+    });
+
+    it('should still have the configs used by live routes', () => {
+      expect(rateLimitConfigs.gemini.models).toBeDefined();
+      expect(rateLimitConfigs.gemini.analyze).toBeDefined();
+      expect(rateLimitConfigs.nanobanana.generate).toBeDefined();
+      expect(rateLimitConfigs.nanobanana.batch).toBeDefined();
     });
   });
 });
