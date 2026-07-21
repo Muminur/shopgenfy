@@ -150,6 +150,12 @@ function isBadgeOrIcon(url: string): boolean {
 /**
  * Resolve a README image reference to an absolute http(s) URL. Relative paths
  * resolve against the repo's raw content root; absolute URLs are kept as-is.
+ * Root-relative paths (a leading `/`, e.g. `/docs/screenshot.png`) are also
+ * resolved against the repo root rather than the host root — `new URL()`
+ * would otherwise treat a leading slash as relative to
+ * `raw.githubusercontent.com` itself, dropping the owner/repo/branch path
+ * and silently breaking the reference. Protocol-relative URLs (`//host/...`)
+ * are left untouched since those already name a different host on purpose.
  * Returns null for data URIs and anything that isn't http(s).
  */
 function resolveImageUrl(raw: string, rawBase: string): string | null {
@@ -160,6 +166,9 @@ function resolveImageUrl(raw: string, rawBase: string): string | null {
   // Strip surrounding angle brackets used in markdown image syntax: ![](<url>)
   if (trimmed.startsWith('<') && trimmed.endsWith('>')) {
     trimmed = trimmed.slice(1, -1);
+  }
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    trimmed = trimmed.replace(/^\/+/, '');
   }
   try {
     const resolved = new URL(trimmed, rawBase);

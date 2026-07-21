@@ -232,6 +232,28 @@ describe('fetchGitHubRepo', () => {
     expect(fetchedUrls.some((u) => u.includes('shields.io'))).toBe(false);
   });
 
+  it('resolves root-relative README image paths against the repo root, not the host root', async () => {
+    const readmeWithRootRelativeImage = [
+      '# is-online',
+      '',
+      'Check if the internet connection is up.',
+      '',
+      '![screenshot](/docs/screenshot.png)',
+    ].join('\n');
+    global.fetch = mockGitHubFetch({
+      '/readme': { ok: true, status: 200, body: { content: b64(readmeWithRootRelativeImage) } },
+    });
+
+    await fetchGitHubRepo('https://github.com/sindresorhus/is-online');
+
+    const fetchedUrls = vi.mocked(fetchImageAsBase64).mock.calls.map((c) => c[0]);
+    // A leading slash is root-relative to the repo, not to raw.githubusercontent.com --
+    // it must resolve against owner/repo/branch, not drop that context.
+    expect(fetchedUrls).toContain(
+      'https://raw.githubusercontent.com/sindresorhus/is-online/main/docs/screenshot.png'
+    );
+  });
+
   it('collects successfully downloaded images as base64 candidates', async () => {
     global.fetch = mockGitHubFetch();
 
