@@ -11,6 +11,7 @@ import { MultiSelect } from '@/components/forms/MultiSelect';
 import { CategorySelect } from '@/components/forms/CategorySelect';
 import { PricingBuilder } from '@/components/forms/PricingBuilder';
 import { ImageGallery } from '@/components/images/ImageGallery';
+import { ScreenshotDropzone } from '@/components/forms/ScreenshotDropzone';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ProgressBar } from '@/components/feedback/ProgressBar';
 import { AlertMessage } from '@/components/feedback/AlertMessage';
@@ -33,12 +34,30 @@ import {
   Tag,
   Eye,
   Wand2,
+  Images,
 } from 'lucide-react';
 import { SUPPORTED_LANGUAGES, SHOPIFY_INTEGRATIONS } from '@/lib/validators/constants';
 import { PricingConfig } from '@/types';
 import { usePreviewSync, PreviewFormData } from '@/hooks/usePreviewSync';
 import { apiFetch, saveDraft, SUBMISSION_ID_STORAGE_KEY } from '@/lib/api-client';
+import type { StoredImage } from '@/lib/image-store';
 import { cn } from '@/lib/utils';
+
+// Screenshot-source preference (Settings) persisted client-side so the
+// dashboard honors it even when the settings API/DB is unavailable.
+const SCREENSHOT_SOURCE_STORAGE_KEY = 'shopgenfy_screenshot_source';
+type ScreenshotSource = 'website' | 'repo' | 'folder';
+
+// Decode a base64 payload (an analyzed-source screenshot) into a Blob so it can
+// be uploaded through the same normalize+store route as folder uploads.
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const byteChars = atob(base64);
+  const bytes = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) {
+    bytes[i] = byteChars.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: mimeType || 'image/png' });
+}
 
 // Segmented-control tab trigger styling (active vs inactive), matching the
 // repo's muted-surface pattern. Hand-rolled to avoid a new radix dependency.
@@ -159,6 +178,23 @@ export default function DashboardPage() {
   const [githubUrl, setGithubUrl] = useState('');
   const [sourceText, setSourceText] = useState('');
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+
+  // Screenshot-source preference from Settings (default 'website'). In 'folder'
+  // mode the dashboard shows an upload dropzone whose images become feature
+  // images directly (no AI).
+  const [screenshotSource, setScreenshotSource] = useState<ScreenshotSource>('website');
+  const [isUsingScreenshots, setIsUsingScreenshots] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(SCREENSHOT_SOURCE_STORAGE_KEY);
+      if (stored === 'website' || stored === 'repo' || stored === 'folder') {
+        setScreenshotSource(stored);
+      }
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, []);
 
   // Preview sync hook for real-time preview synchronization
   const { saveToPreview, lastSynced } = usePreviewSync({ debounceMs: 500 });
@@ -344,12 +380,70 @@ export default function DashboardPage() {
     setSourceFile(e.target.files?.[0] ?? null);
   }, []);
 
+  // Direct-use path: normalized+stored screenshots (from the folder dropzone)
+  // become feature images WITHOUT any AI generation. Append so an uploaded
+  // feature never wipes a previously generated icon.
+  const handleUploadedScreenshots = useCallback((stored: StoredImage[]) => {
+    if (stored.length === 0) return;
+    const mapped = stored.map((img) => ({
+      id: img.id,
+      url: img.url,
+      type: img.type,
+      width: img.width,
+      height: img.height,
+      alt: img.altText,
+      provider: img.provider,
+      featureText: img.featureText,
+    }));
+    setImages((prev) => [...prev, ...mapped]);
+    setSuccess(`Added ${mapped.length} screenshot(s) as feature image(s).`);
+  }, []);
+
+  // Direct-use path for screenshots harvested from an analyzed source: send the
+  // decoded bytes through the same normalize+store upload route, then append the
+  // results as feature images — again, no AI generation.
+  const handleUseScreenshotsDirectly = useCallback(async () => {
+    const usable = extractedScreenshots.filter((s) => s.base64 && s.mimeType);
+    if (usable.length === 0) return;
+
+    setIsUsingScreenshots(true);
+    setError(null);
+
+    try {
+      const stored: StoredImage[] = [];
+      for (const shot of usable) {
+        const blob = base64ToBlob(shot.base64 as string, shot.mimeType as string);
+        const form = new FormData();
+        form.append('file', blob, 'screenshot.png');
+        form.append('kind', 'feature');
+        if (submissionIdRef.current) form.append('submissionId', submissionIdRef.current);
+        if (shot.alt) form.append('altText', shot.alt);
+
+        const res = await apiFetch('/api/screenshots/upload', { method: 'POST', body: form });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Failed to store screenshot (${res.status})`);
+        }
+        const data = await res.json();
+        if (data.image) stored.push(data.image as StoredImage);
+      }
+
+      handleUploadedScreenshots(stored);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to use screenshots';
+      setError(`${message}. Please try again.`);
+    } finally {
+      setIsUsingScreenshots(false);
+    }
+  }, [extractedScreenshots, handleUploadedScreenshots]);
+
   const handleGenerateImages = useCallback(async () => {
     setIsGeneratingImages(true);
     setError(null);
 
     try {
       const generatedImages: typeof images = [];
+      const warnings: string[] = [];
       const features = formData.features.filter((f) => f.trim());
 
       // Sanitize all content to remove Shopify branding before using in prompts
@@ -391,6 +485,7 @@ export default function DashboardPage() {
 
       if (iconResponse.ok) {
         const iconData = await iconResponse.json();
+        if (Array.isArray(iconData.warnings)) warnings.push(...iconData.warnings);
         if (iconData.image) {
           generatedImages.push({
             id: iconData.image.id || `icon-${Date.now()}`,
@@ -436,6 +531,7 @@ export default function DashboardPage() {
 
         if (featureResponse.ok) {
           const featureData = await featureResponse.json();
+          if (Array.isArray(featureData.warnings)) warnings.push(...featureData.warnings);
           if (featureData.image) {
             generatedImages.push({
               id: featureData.image.id || `feature-${Date.now()}-${feature.slice(0, 10)}`,
@@ -453,7 +549,8 @@ export default function DashboardPage() {
 
       if (generatedImages.length > 0) {
         setImages(generatedImages);
-        setSuccess(`Generated ${generatedImages.length} image(s) successfully!`);
+        const warningNote = warnings.length > 0 ? ` Note: ${warnings.join(' ')}` : '';
+        setSuccess(`Generated ${generatedImages.length} image(s) successfully!${warningNote}`);
       } else {
         throw new Error('No images were generated');
       }
@@ -537,15 +634,23 @@ export default function DashboardPage() {
         );
         setImages(generatedImages);
 
+        // Surface any compliance/degraded-path warnings (e.g. prompt-only
+        // feature images that may not satisfy Shopify listing rule 4.4.4) so
+        // the fallback is never silent.
+        const warningNote =
+          Array.isArray(data.warnings) && data.warnings.length > 0
+            ? ` Note: ${data.warnings.join(' ')}`
+            : '';
+
         // Show different success message based on whether screenshots were used
         const usedScreenshots = data.usedScreenshots || 0;
         if (usedScreenshots > 0) {
           setSuccess(
-            `Generated ${generatedImages.length} image(s) with Google Imagen using ${usedScreenshots} extracted screenshot(s)! (App Icon: 1200x1200, Features: 1600x900)`
+            `Generated ${generatedImages.length} image(s) with Google Imagen using ${usedScreenshots} extracted screenshot(s)! (App Icon: 1200x1200, Features: 1600x900)${warningNote}`
           );
         } else {
           setSuccess(
-            `Generated ${generatedImages.length} image(s) with Google Imagen! (App Icon: 1200x1200, Features: 1600x900)`
+            `Generated ${generatedImages.length} image(s) with Google Imagen! (App Icon: 1200x1200, Features: 1600x900)${warningNote}`
           );
         }
       } else {
@@ -1260,6 +1365,47 @@ export default function DashboardPage() {
                 <CardDescription>App icon and feature images for your listing</CardDescription>
               </CardHeader>
               <CardContent>
+                {/* Folder mode: upload your own screenshots. They are normalized
+                    to Shopify specs and used directly as feature images (no AI —
+                    the compliant 4.4.4 primary path). */}
+                {screenshotSource === 'folder' && (
+                  <div className="mb-4">
+                    <ScreenshotDropzone
+                      onUploaded={handleUploadedScreenshots}
+                      submissionId={submissionIdRef.current ?? undefined}
+                    />
+                  </div>
+                )}
+
+                {/* Direct-use of screenshots harvested from an analyzed source. */}
+                {extractedScreenshots.some((s) => s.base64) && (
+                  <div className="mb-4">
+                    <Button
+                      onClick={handleUseScreenshotsDirectly}
+                      disabled={isUsingScreenshots}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      {isUsingScreenshots ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Adding screenshots...
+                        </>
+                      ) : (
+                        <>
+                          <Images className="h-4 w-4 mr-2" />
+                          Use {extractedScreenshots.filter((s) => s.base64).length} screenshot(s)
+                          directly
+                        </>
+                      )}
+                    </Button>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Uses real screenshots as feature images — recommended for Shopify listing rule
+                      4.4.4.
+                    </p>
+                  </div>
+                )}
+
                 {images.length > 0 ? (
                   <ImageGallery
                     images={images}

@@ -11,20 +11,39 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Save, Sparkles, Moon, Sun, Monitor, Loader2, Check } from 'lucide-react';
+import {
+  Save,
+  Sparkles,
+  Moon,
+  Sun,
+  Monitor,
+  Loader2,
+  Check,
+  Globe,
+  Github,
+  FolderUp,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api-client';
+
+type ScreenshotSource = 'website' | 'repo' | 'folder';
+
+// Persisted client-side so the dashboard can honor the preference even when the
+// database is unreachable (the settings API is best-effort, localStorage is not).
+const SCREENSHOT_SOURCE_STORAGE_KEY = 'shopgenfy_screenshot_source';
 
 interface Settings {
   selectedModel: string;
   theme: 'light' | 'dark' | 'system';
   autoSave: boolean;
+  screenshotSource: ScreenshotSource;
 }
 
 const defaultSettings: Settings = {
   selectedModel: 'auto',
   theme: 'system',
   autoSave: true,
+  screenshotSource: 'website',
 };
 
 const availableModels = [
@@ -54,6 +73,27 @@ const themeOptions = [
   { id: 'system' as const, name: 'System', icon: Monitor, description: 'Follow system preference' },
 ];
 
+const screenshotSourceOptions = [
+  {
+    id: 'website' as const,
+    name: 'Website',
+    icon: Globe,
+    description: 'Use screenshots pulled from the analyzed website',
+  },
+  {
+    id: 'repo' as const,
+    name: 'Repository',
+    icon: Github,
+    description: 'Use images referenced in the analyzed GitHub repo',
+  },
+  {
+    id: 'folder' as const,
+    name: 'Folder (your uploads)',
+    icon: FolderUp,
+    description: 'Upload your own screenshots and use them directly',
+  },
+];
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,11 +118,25 @@ export default function SettingsPage() {
         if (response.ok) {
           const data = await response.json();
           const loadedTheme = data.theme || defaultSettings.theme;
+          // Prefer the server value, but fall back to the locally persisted
+          // choice so a DB-down session still reflects the user's preference.
+          let localSource: ScreenshotSource | null = null;
+          try {
+            const stored = localStorage.getItem(SCREENSHOT_SOURCE_STORAGE_KEY);
+            if (stored === 'website' || stored === 'repo' || stored === 'folder') {
+              localSource = stored;
+            }
+          } catch {
+            /* localStorage unavailable */
+          }
+
           setSettings({
             // API uses selectedGeminiModel, but frontend uses selectedModel
             selectedModel: data.selectedGeminiModel || defaultSettings.selectedModel,
             theme: loadedTheme,
             autoSave: data.autoSave ?? defaultSettings.autoSave,
+            screenshotSource:
+              data.screenshotSource || localSource || defaultSettings.screenshotSource,
           });
           // Sync the loaded theme preference with next-themes
           setTheme(loadedTheme);
@@ -127,7 +181,16 @@ export default function SettingsPage() {
         selectedGeminiModel: settings.selectedModel,
         theme: settings.theme,
         autoSave: settings.autoSave,
+        screenshotSource: settings.screenshotSource,
       };
+
+      // Persist the screenshot source locally first so the dashboard honors it
+      // even if the settings API (DB) is unavailable.
+      try {
+        localStorage.setItem(SCREENSHOT_SOURCE_STORAGE_KEY, settings.screenshotSource);
+      } catch {
+        /* localStorage unavailable */
+      }
 
       const response = await apiFetch('/api/settings', {
         method: 'PUT',
@@ -162,6 +225,15 @@ export default function SettingsPage() {
 
   const handleAutoSaveToggle = useCallback((checked: boolean) => {
     setSettings((prev) => ({ ...prev, autoSave: checked }));
+  }, []);
+
+  const handleScreenshotSourceSelect = useCallback((source: ScreenshotSource) => {
+    setSettings((prev) => ({ ...prev, screenshotSource: source }));
+    try {
+      localStorage.setItem(SCREENSHOT_SOURCE_STORAGE_KEY, source);
+    } catch {
+      /* localStorage unavailable */
+    }
   }, []);
 
   if (isLoading) {
@@ -272,6 +344,50 @@ export default function SettingsPage() {
                       {settings.theme === option.id && (
                         <Check className="h-4 w-4 text-primary mt-2" aria-hidden="true" />
                       )}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            </CardContent>
+          </Card>
+
+          {/* Screenshot Source */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FolderUp className="h-5 w-5" />
+                Screenshot Source
+              </CardTitle>
+              <CardDescription>
+                Choose where feature-image screenshots come from. Real screenshots are auto-cropped
+                to Shopify specs and used directly (no AI needed).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <fieldset>
+                <legend className="sr-only">Select Screenshot Source</legend>
+                <div className="grid gap-4 sm:grid-cols-3" role="radiogroup">
+                  {screenshotSourceOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => handleScreenshotSourceSelect(option.id)}
+                      role="radio"
+                      aria-checked={settings.screenshotSource === option.id}
+                      aria-label={`${option.name}: ${option.description}`}
+                      className={cn(
+                        'flex flex-col items-start rounded-lg border p-4 text-left transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+                        settings.screenshotSource === option.id && 'border-primary bg-primary/5'
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <option.icon className="h-4 w-4" aria-hidden="true" />
+                        <span className="font-medium">{option.name}</span>
+                        {settings.screenshotSource === option.id && (
+                          <Check className="h-4 w-4 text-primary" aria-hidden="true" />
+                        )}
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">{option.description}</p>
                     </button>
                   ))}
                 </div>
