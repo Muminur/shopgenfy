@@ -67,6 +67,7 @@ nul
 # Tooling directories (local only)
 .playwright-mcp/
 .omc/
+.claude/
 
 # Planning docs (local only - not part of the shipped repo)
 docs/superpowers/

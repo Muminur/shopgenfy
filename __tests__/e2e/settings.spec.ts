@@ -15,28 +15,27 @@ test.describe('Settings Page', () => {
   });
 
   test('should have model selection section', async ({ page }) => {
-    const modelSection = page.getByText(/model|gemini/i);
+    const modelSection = page.getByText(/model|gemini/i).first();
     await expect(modelSection).toBeVisible();
   });
 
   test('should have theme toggle', async ({ page }) => {
-    const themeToggle = page.getByRole('button', { name: /theme|dark|light/i });
+    // Theme options render as role="radio" cards (not a single toggle button).
+    const themeToggle = page.getByRole('radio', { name: /theme/i }).first();
     await expect(themeToggle).toBeVisible();
   });
 
   test('should toggle theme on click', async ({ page }) => {
-    const themeToggle = page.getByRole('button', { name: /theme|dark|light/i });
     const htmlElement = page.locator('html');
 
-    // Get initial theme
-    const initialClass = await htmlElement.getAttribute('class');
+    // Selecting the Dark theme radio applies the `dark` class to <html>
+    // (next-themes with attribute="class").
+    await page.getByRole('radio', { name: /dark theme/i }).click();
+    await expect(htmlElement).toHaveClass(/dark/);
 
-    // Click toggle
-    await themeToggle.click();
-
-    // Theme should change
-    const newClass = await htmlElement.getAttribute('class');
-    expect(newClass).not.toBe(initialClass);
+    // Selecting Light removes it — proving the toggle changes the theme.
+    await page.getByRole('radio', { name: /light theme/i }).click();
+    await expect(htmlElement).not.toHaveClass(/dark/);
   });
 
   test('should persist model selection', async ({ page }) => {
@@ -64,7 +63,7 @@ test.describe('Settings Page - AI Model Selection', () => {
   });
 
   test('should display AI Model Selection card', async ({ page }) => {
-    const cardTitle = page.getByRole('heading', { name: /ai model selection/i });
+    const cardTitle = page.getByText('AI Model Selection', { exact: true });
     await expect(cardTitle).toBeVisible();
   });
 
@@ -74,31 +73,33 @@ test.describe('Settings Page - AI Model Selection', () => {
   });
 
   test('should display multiple model options', async ({ page }) => {
-    // Look for model cards/buttons
+    // Look for model cards/buttons (wait for the settings load to render them
+    // before counting — count() does not auto-wait).
     const modelButtons = page.getByRole('radio');
+    await expect(modelButtons.first()).toBeVisible();
     const count = await modelButtons.count();
 
     // Should have at least 2 model options
     expect(count).toBeGreaterThanOrEqual(2);
   });
 
-  test('should display Gemini 1.5 Pro option', async ({ page }) => {
-    const proOption = page.getByText(/gemini 1\.5 pro/i);
-    await expect(proOption).toBeVisible();
+  test('should display the Auto (recommended) model option', async ({ page }) => {
+    const autoOption = page.getByText('Auto', { exact: true });
+    await expect(autoOption).toBeVisible();
   });
 
-  test('should display Gemini 1.5 Flash option', async ({ page }) => {
-    const flashOption = page.getByText(/gemini 1\.5 flash/i);
+  test('should display the Gemini 3.5 Flash model option', async ({ page }) => {
+    const flashOption = page.getByText(/gemini 3\.5 flash/i);
     await expect(flashOption).toBeVisible();
   });
 
   test('should display model descriptions', async ({ page }) => {
-    // Check for capability descriptions
-    const capableDescription = page.getByText(/most capable|best quality/i);
-    await expect(capableDescription).toBeVisible();
+    // Auto model self-heal description.
+    const autoDescription = page.getByText(/best available|self-heal/i);
+    await expect(autoDescription).toBeVisible();
 
     const fastDescription = page.getByText(/fast|efficient/i);
-    await expect(fastDescription).toBeVisible();
+    await expect(fastDescription.first()).toBeVisible();
   });
 
   test('should show recommended badge', async ({ page }) => {
@@ -142,7 +143,7 @@ test.describe('Settings Page - Theme & Appearance', () => {
   });
 
   test('should display Theme & Appearance card', async ({ page }) => {
-    const cardTitle = page.getByRole('heading', { name: /theme.*appearance/i });
+    const cardTitle = page.getByText('Theme & Appearance', { exact: true });
     await expect(cardTitle).toBeVisible();
   });
 
@@ -160,8 +161,14 @@ test.describe('Settings Page - Theme & Appearance', () => {
     // Light theme should have Sun icon
     // Dark theme should have Moon icon
     // System theme should have Monitor icon
-    const themeSection = page.getByRole('heading', { name: /theme.*appearance/i }).locator('..');
-    const icons = themeSection.locator('svg');
+    // Walk up from the CardTitle text to the Card, then count the theme icons
+    // (Sun / Moon / Monitor) rendered inside the option buttons.
+    const themeCard = page
+      .getByText('Theme & Appearance', { exact: true })
+      .locator('..')
+      .locator('..');
+    const icons = themeCard.locator('svg');
+    await expect(icons.first()).toBeVisible();
     const iconCount = await icons.count();
 
     // Should have at least 3 icons for themes
@@ -198,7 +205,7 @@ test.describe('Settings Page - Auto-save Settings', () => {
   });
 
   test('should display Auto-save card', async ({ page }) => {
-    const cardTitle = page.getByRole('heading', { name: /auto.?save/i });
+    const cardTitle = page.getByText('Auto-save', { exact: true });
     await expect(cardTitle).toBeVisible();
   });
 
@@ -239,6 +246,14 @@ test.describe('Settings Page - Save Settings', () => {
   });
 
   test('should show loading state when saving', async ({ page }) => {
+    // Delay the PUT so the transient "Saving..." state is observable.
+    await page.route('**/api/settings', async (route) => {
+      if (route.request().method() === 'PUT') {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      await route.continue();
+    });
+
     const saveButton = page.getByRole('button', { name: /save settings/i });
     await saveButton.click();
 
@@ -287,16 +302,15 @@ test.describe('Settings Page - API Status Display', () => {
     await expect(loadingSpinner).not.toBeVisible();
   });
 
-  test('should handle API errors on load', async ({ page, context }) => {
-    // Go offline before loading
-    await context.setOffline(true);
+  test('should handle API errors on load', async ({ page }) => {
+    // Abort just the settings API (not the whole network — that would block the
+    // page load itself) so the load-error path is exercised.
+    await page.route('**/api/settings', (route) => route.abort());
     await page.reload();
 
     // Should show error message
     const errorMessage = page.getByRole('alert').or(page.getByText(/failed to load/i));
-    await expect(errorMessage).toBeVisible({ timeout: 10000 });
-
-    await context.setOffline(false);
+    await expect(errorMessage.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should dismiss error alerts', async ({ page }) => {
@@ -399,14 +413,14 @@ test.describe('Settings Page - Responsive Behavior', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/settings');
 
-    // All cards should be visible
-    const modelCard = page.getByRole('heading', { name: /ai model selection/i });
+    // All cards should be visible (CardTitle renders as text, not a heading).
+    const modelCard = page.getByText('AI Model Selection', { exact: true });
     await expect(modelCard).toBeVisible();
 
-    const themeCard = page.getByRole('heading', { name: /theme/i });
+    const themeCard = page.getByText('Theme & Appearance', { exact: true });
     await expect(themeCard).toBeVisible();
 
-    const autoSaveCard = page.getByRole('heading', { name: /auto.?save/i });
+    const autoSaveCard = page.getByText('Auto-save', { exact: true });
     await expect(autoSaveCard).toBeVisible();
   });
 

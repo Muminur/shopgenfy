@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+// Card titles render as styled <div>s (shadcn CardTitle), not semantic
+// headings, so section titles are matched by text. Only the page <h1> and the
+// image gallery use real heading roles.
+
 test.describe('Dashboard Page', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/dashboard');
@@ -10,7 +14,7 @@ test.describe('Dashboard Page', () => {
   });
 
   test('should have URL input for landing page analysis', async ({ page }) => {
-    const urlInput = page.getByPlaceholder(/url|website|landing/i);
+    const urlInput = page.getByPlaceholder('https://your-app.com');
     await expect(urlInput).toBeVisible();
   });
 
@@ -31,12 +35,12 @@ test.describe('Dashboard Page', () => {
 
   test('should validate required fields', async ({ page }) => {
     // Try to submit without filling required fields
-    const submitButton = page.getByRole('button', { name: /save|submit|create/i });
+    const submitButton = page.getByRole('button', { name: /save|submit|create/i }).first();
     if (await submitButton.isVisible()) {
       await submitButton.click();
       // Should show validation errors
       const errorMessage = page.getByRole('alert');
-      await expect(errorMessage).toBeVisible();
+      await expect(errorMessage.first()).toBeVisible();
     }
   });
 
@@ -46,13 +50,13 @@ test.describe('Dashboard Page', () => {
   });
 
   test('should have images section', async ({ page }) => {
-    const imagesSection = page.getByText(/images|generated/i);
+    const imagesSection = page.getByText('Generated Images', { exact: true });
     await expect(imagesSection).toBeVisible();
   });
 
   test('should be responsive on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    const urlInput = page.getByPlaceholder(/url|website|landing/i);
+    const urlInput = page.getByPlaceholder('https://your-app.com');
     await expect(urlInput).toBeVisible();
   });
 });
@@ -63,44 +67,45 @@ test.describe('Dashboard Page - Languages & Integrations Section', () => {
   });
 
   test('should display Languages & Integrations section', async ({ page }) => {
-    const sectionTitle = page.getByRole('heading', { name: /languages.*integrations/i });
+    const sectionTitle = page.getByText('Languages & Integrations', { exact: true });
     await expect(sectionTitle).toBeVisible();
   });
 
   test('should display Languages multi-select', async ({ page }) => {
-    const languagesLabel = page.getByText(/^languages$/i);
+    const languagesLabel = page.getByText('Languages', { exact: true });
     await expect(languagesLabel).toBeVisible();
 
-    // Look for the languages select placeholder or trigger
-    const languagesSelect = page.getByPlaceholder(/select.*languages/i);
+    // MultiSelect renders a role="combobox" button whose accessible name is the
+    // placeholder text (a <label> does not associate with a <button>).
+    const languagesSelect = page.getByRole('combobox', { name: /^languages$/i });
     await expect(languagesSelect).toBeVisible();
   });
 
   test('should display Works With multi-select', async ({ page }) => {
-    const worksWithLabel = page.getByText(/works with/i);
+    const worksWithLabel = page.getByText('Works With', { exact: true });
     await expect(worksWithLabel).toBeVisible();
 
-    // Look for the integrations select placeholder
-    const worksWithSelect = page.getByPlaceholder(/select.*integrations/i);
+    const worksWithSelect = page.getByRole('combobox', { name: /^works with$/i });
     await expect(worksWithSelect).toBeVisible();
   });
 
   test('should allow selecting multiple languages', async ({ page }) => {
-    const languagesSelect = page.getByPlaceholder(/select.*languages/i);
+    const languagesSelect = page.getByRole('combobox', { name: /^languages$/i });
     await languagesSelect.click();
 
     // Wait for dropdown to open
     await page.waitForTimeout(300);
 
-    // Look for language options
-    const englishOption = page.getByRole('option', { name: /english/i });
+    // Look for language options. The cmdk scroll container can intercept the
+    // hit-test, so force the click on the option itself.
+    const englishOption = page.getByRole('option', { name: /english/i }).first();
     if (await englishOption.isVisible()) {
-      await englishOption.click();
+      await englishOption.click({ force: true });
     }
 
     // Check that selection was made
     const selectedBadge = page.getByText(/english/i);
-    await expect(selectedBadge).toBeVisible();
+    await expect(selectedBadge.first()).toBeVisible();
   });
 
   test('should limit Works With to maximum 6 items', async ({ page }) => {
@@ -114,7 +119,7 @@ test.describe('Dashboard Page - Languages & Integrations Section', () => {
   });
 
   test('should be keyboard accessible for multi-select', async ({ page }) => {
-    const languagesSelect = page.getByPlaceholder(/select.*languages/i);
+    const languagesSelect = page.getByRole('combobox', { name: /^languages$/i });
     await languagesSelect.focus();
 
     // Should be focusable
@@ -128,10 +133,9 @@ test.describe('Dashboard Page - Languages & Integrations Section', () => {
   });
 
   test('should display Languages icon in section header', async ({ page }) => {
-    // Look for the Languages icon (lucide Languages icon)
-    const sectionHeader = page.getByRole('heading', { name: /languages.*integrations/i });
-    const parentCard = sectionHeader.locator('..');
-    const icon = parentCard.locator('svg');
+    // The lucide Languages icon lives inside the CardTitle text element.
+    const sectionHeader = page.getByText('Languages & Integrations', { exact: true });
+    const icon = sectionHeader.locator('svg');
     await expect(icon.first()).toBeVisible();
   });
 });
@@ -142,28 +146,28 @@ test.describe('Dashboard Page - Categories Section', () => {
   });
 
   test('should display Categories section', async ({ page }) => {
-    const sectionTitle = page.getByRole('heading', { name: /^categories$/i });
+    const sectionTitle = page.getByText('Categories', { exact: true });
     await expect(sectionTitle).toBeVisible();
   });
 
   test('should display Primary Category selector', async ({ page }) => {
-    const primaryLabel = page.getByText(/primary category/i);
+    const primaryLabel = page.getByText('Primary Category', { exact: true });
     await expect(primaryLabel).toBeVisible();
 
-    const primarySelect = page.getByPlaceholder(/select primary category/i);
+    const primarySelect = page.getByRole('combobox', { name: /primary category/i });
     await expect(primarySelect).toBeVisible();
   });
 
   test('should display Secondary Category selector', async ({ page }) => {
-    const secondaryLabel = page.getByText(/secondary category/i);
+    const secondaryLabel = page.getByText(/secondary category/i).first();
     await expect(secondaryLabel).toBeVisible();
 
-    const secondarySelect = page.getByPlaceholder(/select secondary category/i);
+    const secondarySelect = page.getByRole('combobox', { name: /secondary category/i });
     await expect(secondarySelect).toBeVisible();
   });
 
   test('should allow selecting primary category', async ({ page }) => {
-    const primarySelect = page.getByPlaceholder(/select primary category/i);
+    const primarySelect = page.getByRole('combobox', { name: /primary category/i });
     await primarySelect.click();
 
     // Wait for dropdown to open
@@ -185,7 +189,7 @@ test.describe('Dashboard Page - Categories Section', () => {
 
   test('should indicate secondary category is optional', async ({ page }) => {
     // Look for optional indicator
-    const optionalText = page.getByText(/optional/i);
+    const optionalText = page.getByText(/optional/i).first();
     // This could be in the label or as a separate indicator
     if (await optionalText.isVisible()) {
       await expect(optionalText).toBeVisible();
@@ -193,9 +197,8 @@ test.describe('Dashboard Page - Categories Section', () => {
   });
 
   test('should display Categories icon in section header', async ({ page }) => {
-    const sectionHeader = page.getByRole('heading', { name: /^categories$/i });
-    const parentCard = sectionHeader.locator('..');
-    const icon = parentCard.locator('svg');
+    const sectionHeader = page.getByText('Categories', { exact: true });
+    const icon = sectionHeader.locator('svg');
     await expect(icon.first()).toBeVisible();
   });
 
@@ -211,7 +214,7 @@ test.describe('Dashboard Page - Pricing Section', () => {
   });
 
   test('should display Pricing section', async ({ page }) => {
-    const sectionTitle = page.getByRole('heading', { name: /^pricing$/i });
+    const sectionTitle = page.getByText('Pricing', { exact: true });
     await expect(sectionTitle).toBeVisible();
   });
 
@@ -221,16 +224,28 @@ test.describe('Dashboard Page - Pricing Section', () => {
   });
 
   test('should display pricing type options', async ({ page }) => {
-    // Look for common pricing types
-    const freeOption = page.getByText(/^free$/i);
-    const paidOption = page.getByText(/one.?time/i);
-    const subscriptionOption = page.getByText(/subscription|recurring/i);
+    // Pricing type is a Radix Select; options live in the popover, so open it.
+    const pricingTrigger = page.getByRole('combobox', { name: /pricing type/i });
+    await pricingTrigger.click();
+
+    const freeOption = page.getByRole('option', { name: /free/i });
+    const paidOption = page.getByRole('option', { name: /paid/i });
+    const subscriptionOption = page.getByRole('option', { name: /subscription/i });
 
     // At least one pricing option should be visible
     const anyVisible =
-      (await freeOption.isVisible({ timeout: 1000 }).catch(() => false)) ||
-      (await paidOption.isVisible({ timeout: 1000 }).catch(() => false)) ||
-      (await subscriptionOption.isVisible({ timeout: 1000 }).catch(() => false));
+      (await freeOption
+        .first()
+        .isVisible({ timeout: 1000 })
+        .catch(() => false)) ||
+      (await paidOption
+        .first()
+        .isVisible({ timeout: 1000 })
+        .catch(() => false)) ||
+      (await subscriptionOption
+        .first()
+        .isVisible({ timeout: 1000 })
+        .catch(() => false));
 
     expect(anyVisible).toBeTruthy();
   });
@@ -249,19 +264,19 @@ test.describe('Dashboard Page - Pricing Section', () => {
       .getByRole('radio', { name: /paid|one.?time/i })
       .or(page.getByText(/one.?time.*purchase/i));
 
-    if (await paidOption.isVisible()) {
-      await paidOption.click();
+    if (await paidOption.first().isVisible()) {
+      await paidOption.first().click();
 
       // Should show price input
       const priceInput = page.getByLabel(/price|amount/i);
-      if (await priceInput.isVisible()) {
-        await expect(priceInput).toBeVisible();
+      if (await priceInput.first().isVisible()) {
+        await expect(priceInput.first()).toBeVisible();
       }
     }
   });
 
   test('should be keyboard accessible', async ({ page }) => {
-    const sectionTitle = page.getByRole('heading', { name: /^pricing$/i });
+    const sectionTitle = page.getByText('Pricing', { exact: true });
     await sectionTitle.scrollIntoViewIfNeeded();
 
     // Tab to pricing options
@@ -293,7 +308,10 @@ test.describe('Dashboard Page - Auto-save Functionality', () => {
     // Check if saving indicator appears (optional - auto-save may be silent)
     const savingIndicator = page.getByText(/saving|auto.?sav|saved/i);
     // Just check visibility without failing if not present
-    await savingIndicator.isVisible().catch(() => false);
+    await savingIndicator
+      .first()
+      .isVisible()
+      .catch(() => false);
 
     // No error should appear during normal interaction
     const errorAlert = page.getByRole('alert').filter({ hasText: /error|failed/i });
@@ -361,13 +379,13 @@ test.describe('Dashboard Page - Auto-save Functionality', () => {
   test('should update progress indicator as fields are filled', async ({ page }) => {
     // Check initial progress
     const progressBar = page.getByRole('progressbar').or(page.getByText(/\d+%.*complete/i));
-    if (await progressBar.isVisible()) {
+    if (await progressBar.first().isVisible()) {
       // Fill some fields
       const appNameInput = page.getByLabel(/app name/i);
       await appNameInput.fill('Progress Test App');
 
       // Progress should update (we can't assert exact value, just that it changed)
-      await expect(progressBar).toBeVisible();
+      await expect(progressBar.first()).toBeVisible();
     }
   });
 });
@@ -380,8 +398,8 @@ test.describe('Dashboard Page - Form Validation', () => {
   test('should show character limit warnings', async ({ page }) => {
     const appNameInput = page.getByLabel(/app name/i);
 
-    // Type text near the limit
-    await appNameInput.fill('This is exactly thirty chars');
+    // Exactly 30 characters so the counter reads "30/30".
+    await appNameInput.fill('Thirty character app name here');
 
     // Look for character count display
     const charCount = page.getByText(/30.*30|30 \/ 30/);
@@ -396,13 +414,18 @@ test.describe('Dashboard Page - Form Validation', () => {
 
     // Look for visual indicator of exceeded limit (could be red text, warning, etc.)
     const exceedWarning = page.locator('.text-destructive, .text-red, [aria-invalid="true"]');
-    if (await exceedWarning.isVisible({ timeout: 1000 }).catch(() => false)) {
+    if (
+      await exceedWarning
+        .first()
+        .isVisible({ timeout: 1000 })
+        .catch(() => false)
+    ) {
       await expect(exceedWarning.first()).toBeVisible();
     }
   });
 
   test('should validate URL format', async ({ page }) => {
-    const urlInput = page.getByPlaceholder(/url|website|landing/i);
+    const urlInput = page.getByPlaceholder('https://your-app.com');
     await urlInput.fill('not-a-valid-url');
 
     const analyzeButton = page.getByRole('button', { name: /analyze/i });
@@ -412,14 +435,14 @@ test.describe('Dashboard Page - Form Validation', () => {
     if (!isDisabled) {
       await analyzeButton.click();
       const errorMessage = page.getByText(/invalid|valid url/i);
-      await expect(errorMessage).toBeVisible({ timeout: 5000 });
+      await expect(errorMessage.first()).toBeVisible({ timeout: 5000 });
     } else {
       expect(isDisabled).toBeTruthy();
     }
   });
 
   test('should enable analyze button with valid URL', async ({ page }) => {
-    const urlInput = page.getByPlaceholder(/url|website|landing/i);
+    const urlInput = page.getByPlaceholder('https://your-app.com');
     await urlInput.fill('https://example.com');
 
     const analyzeButton = page.getByRole('button', { name: /analyze/i });
@@ -433,7 +456,7 @@ test.describe('Dashboard Page - Actions Section', () => {
   });
 
   test('should display Actions card', async ({ page }) => {
-    const actionsTitle = page.getByRole('heading', { name: /^actions$/i });
+    const actionsTitle = page.getByText('Actions', { exact: true });
     await expect(actionsTitle).toBeVisible();
   });
 
@@ -443,7 +466,7 @@ test.describe('Dashboard Page - Actions Section', () => {
   });
 
   test('should have Generate Images button', async ({ page }) => {
-    const generateButton = page.getByRole('button', { name: /generate.*images/i });
+    const generateButton = page.getByRole('button', { name: /generate images/i }).first();
     await expect(generateButton).toBeVisible();
   });
 
@@ -466,9 +489,8 @@ test.describe('Dashboard Page - Actions Section', () => {
     const appNameInput = page.getByLabel(/app name/i);
     await appNameInput.clear();
 
-    const generateButton = page
-      .getByRole('button', { name: /generate.*images/i })
-      .filter({ hasNot: page.locator('text=/regenerate/i') });
+    // The Actions "Generate Images" button (last in DOM) is gated on app name.
+    const generateButton = page.getByRole('button', { name: /generate images/i }).last();
 
     if (await generateButton.isVisible()) {
       const isDisabled = await generateButton.isDisabled();
@@ -477,6 +499,13 @@ test.describe('Dashboard Page - Actions Section', () => {
   });
 
   test('Save Draft button should show loading state when clicked', async ({ page }) => {
+    // Delay the save so the transient "Saving..." state is observable (a fast
+    // local DB otherwise clears it before the assertion can catch it).
+    await page.route('**/api/submissions**', async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.continue();
+    });
+
     // Fill required field
     const appNameInput = page.getByLabel(/app name/i);
     await appNameInput.fill('Save Test App');
@@ -499,7 +528,7 @@ test.describe('Dashboard Page - Responsive Behavior', () => {
     const appNameInput = page.getByLabel(/app name/i);
     await expect(appNameInput).toBeVisible();
 
-    const imagesSection = page.getByText(/generated images/i);
+    const imagesSection = page.getByText('Generated Images', { exact: true });
     await expect(imagesSection).toBeVisible();
   });
 
@@ -518,7 +547,7 @@ test.describe('Dashboard Page - Responsive Behavior', () => {
     await page.goto('/dashboard');
 
     // Scroll to bottom sections
-    const pricingSection = page.getByRole('heading', { name: /^pricing$/i });
+    const pricingSection = page.getByText('Pricing', { exact: true });
     await pricingSection.scrollIntoViewIfNeeded();
     await expect(pricingSection).toBeInViewport();
   });
