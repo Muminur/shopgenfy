@@ -155,6 +155,32 @@ describe('Settings Page', () => {
       expect(body.screenshotSource).toBe('folder');
       expect(localStorage.getItem('shopgenfy_screenshot_source')).toBe('folder');
     });
+
+    it('falls back to the locally cached screenshot source when the settings fetch fails (DB down)', async () => {
+      localStorage.clear();
+      localStorage.setItem('shopgenfy_screenshot_source', 'repo');
+      mockFetch.mockReset();
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: 'Database unavailable' }),
+      });
+
+      render(<SettingsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Screenshot Source')).toBeInTheDocument();
+      });
+
+      // DB-down should still honor the value the user already saved locally,
+      // not silently reset to the hardcoded 'website' default.
+      await waitFor(() => {
+        expect(screen.getByRole('radio', { name: /repo/i })).toHaveAttribute(
+          'aria-checked',
+          'true'
+        );
+      });
+    });
   });
 
   describe('Save Button', () => {

@@ -112,23 +112,30 @@ export default function SettingsPage() {
 
   // Load settings on mount
   useEffect(() => {
+    const readLocalScreenshotSource = (): ScreenshotSource | null => {
+      try {
+        const stored = localStorage.getItem(SCREENSHOT_SOURCE_STORAGE_KEY);
+        if (stored === 'website' || stored === 'repo' || stored === 'folder') {
+          return stored;
+        }
+      } catch {
+        /* localStorage unavailable */
+      }
+      return null;
+    };
+
     const loadSettings = async () => {
       try {
         const response = await apiFetch('/api/settings');
+        // Prefer the server value, but fall back to the locally persisted
+        // choice so a DB-down session (a normal, supported state for this
+        // app) still reflects the user's preference instead of silently
+        // resetting to hardcoded defaults.
+        const localSource = readLocalScreenshotSource();
+
         if (response.ok) {
           const data = await response.json();
           const loadedTheme = data.theme || defaultSettings.theme;
-          // Prefer the server value, but fall back to the locally persisted
-          // choice so a DB-down session still reflects the user's preference.
-          let localSource: ScreenshotSource | null = null;
-          try {
-            const stored = localStorage.getItem(SCREENSHOT_SOURCE_STORAGE_KEY);
-            if (stored === 'website' || stored === 'repo' || stored === 'folder') {
-              localSource = stored;
-            }
-          } catch {
-            /* localStorage unavailable */
-          }
 
           setSettings({
             // API uses selectedGeminiModel, but frontend uses selectedModel
@@ -140,6 +147,16 @@ export default function SettingsPage() {
           });
           // Sync the loaded theme preference with next-themes
           setTheme(loadedTheme);
+        } else {
+          // Settings API unavailable (e.g. 503 while the database is down).
+          // Only screenshotSource has a dedicated localStorage cache here;
+          // theme is already recovered independently via next-themes' own
+          // persistence and the mounted/currentTheme sync effect below, and
+          // the model has no local cache to fall back to.
+          setSettings((prev) => ({
+            ...prev,
+            screenshotSource: localSource || defaultSettings.screenshotSource,
+          }));
         }
       } catch {
         setError('Failed to load settings');
