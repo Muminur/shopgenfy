@@ -150,7 +150,7 @@ describe('Vercel Configuration', () => {
       expect(cacheControl.value).toContain('no-cache');
     });
 
-    it('should exclude /api/images from the blanket no-store rule so stored images stay cacheable', () => {
+    it('should exclude /api/images/<id> from the blanket no-store rule so stored images stay cacheable', () => {
       // The /api/images/[id] route handler sets its own
       // `Cache-Control: private, max-age=86400` (spec Task 5). If the blanket
       // /api/:path* no-store rule also matches that route, Vercel's edge
@@ -163,7 +163,10 @@ describe('Vercel Configuration', () => {
       const matcher = pathToRegexp(apiHeaders.source);
 
       expect(matcher.test('/api/images/some-id')).toBe(false);
-      expect(matcher.test('/api/images')).toBe(false);
+
+      // /api/images itself (the metadata list route) sets no Cache-Control
+      // of its own, so it must stay under the blanket no-store rule.
+      expect(matcher.test('/api/images')).toBe(true);
 
       // Every other API route must still get the no-store treatment.
       expect(matcher.test('/api/gemini/analyze')).toBe(true);

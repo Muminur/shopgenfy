@@ -213,7 +213,7 @@ describe('Deployment Readiness Verification', () => {
       expect(content).toContain('X-XSS-Protection');
     });
 
-    it('should exclude /api/images from the blanket API no-store rule so stored images stay cacheable', async () => {
+    it('should exclude /api/images/<id> from the blanket API no-store rule so stored images stay cacheable', async () => {
       // The /api/images/[id] route sets its own
       // `Cache-Control: private, max-age=86400` (spec Task 5). If the
       // blanket /api/:path* no-store rule here also matches that route, the
@@ -235,7 +235,10 @@ describe('Deployment Readiness Verification', () => {
       const matcher = pathToRegexp(apiRule.source);
 
       expect(matcher.test('/api/images/some-id')).toBe(false);
-      expect(matcher.test('/api/images')).toBe(false);
+
+      // /api/images itself (the metadata list route) sets no Cache-Control
+      // of its own, so it must stay under the blanket no-store rule.
+      expect(matcher.test('/api/images')).toBe(true);
 
       // Every other API route must still get the no-store treatment.
       expect(matcher.test('/api/gemini/analyze')).toBe(true);
