@@ -146,3 +146,77 @@ describe('Dashboard prompt-only compliance warning', () => {
     expect(await screen.findByText(/4\.4\.4/)).toBeInTheDocument();
   });
 });
+
+describe('Dashboard extracted-screenshots direct-use', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({}) });
+    store.clear();
+  });
+
+  afterEach(() => {
+    store.clear();
+  });
+
+  it('uses analyzed-source screenshots directly as feature images without any AI generation', async () => {
+    const user = userEvent.setup();
+
+    // 1) An analysis that harvested a screenshot candidate (base64 bytes).
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        appName: 'Analyzed App',
+        appIntroduction: 'Tagline',
+        appDescription: 'Description',
+        featureList: ['One'],
+        languages: ['en'],
+        primaryCategory: 'Store management',
+        screenshots: [{ base64: 'aGVsbG8=', mimeType: 'image/png', alt: 'home screen' }],
+      }),
+    });
+
+    render(<DashboardPage />);
+    await user.type(screen.getByLabelText(/landing page url/i), 'https://example.com');
+    await user.click(screen.getByRole('button', { name: /analyze with ai/i }));
+
+    // 2) The direct-use button appears once screenshots are extracted.
+    const useButton = await screen.findByRole('button', {
+      name: /use .*screenshot.*directly/i,
+    });
+
+    // 3) The normalize+store upload route returns a stored feature image.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        image: {
+          id: 'shot1',
+          url: '/api/images/shot1',
+          width: 1600,
+          height: 900,
+          type: 'feature',
+          altText: 'home screen',
+          provider: 'upload',
+        },
+      }),
+    });
+
+    await user.click(useButton);
+
+    await waitFor(() => {
+      expect(mockFetch.mock.calls.some((c) => c[0] === '/api/screenshots/upload')).toBe(true);
+    });
+
+    // Direct-use: never calls either AI generate endpoint.
+    expect(
+      mockFetch.mock.calls.some((c) => String(c[0]).includes('/api/nanobanana/generate'))
+    ).toBe(false);
+    expect(mockFetch.mock.calls.some((c) => String(c[0]).includes('/api/imagen/generate'))).toBe(
+      false
+    );
+
+    // The stored screenshot is now a feature image (empty state gone).
+    await waitFor(() => {
+      expect(screen.queryByText(/no images generated/i)).not.toBeInTheDocument();
+    });
+  });
+});
