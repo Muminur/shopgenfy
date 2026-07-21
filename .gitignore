@@ -42,6 +42,10 @@ next-env.d.ts
 
 # Documentation files (local only - no markdown in repo)
 *.md
+!README.md
+!CONTRIBUTING.md
+!docs/API.md
+!docs/DEPLOYMENT.md
 
 # IDE
 .idea/
