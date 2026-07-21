@@ -77,7 +77,10 @@ describe('Image store API routes', () => {
       expect(data.images[0].url).toBe(`/api/images/${a.id}`);
     });
 
-    it('returns all images when submissionId is omitted', async () => {
+    it('returns 400 when submissionId is omitted (no cross-submission enumeration)', async () => {
+      // Guards against unauthenticated enumeration of every stored image: the
+      // route must never list the whole store. A missing submissionId is a
+      // client error, and nothing is leaked.
       imageStore.put({
         buffer: Buffer.from([1]),
         width: 1200,
@@ -85,6 +88,7 @@ describe('Image store API routes', () => {
         type: 'icon',
         altText: 'a',
         provider: 'upload',
+        submissionId: 'sub-1',
       });
       imageStore.put({
         buffer: Buffer.from([2]),
@@ -93,15 +97,25 @@ describe('Image store API routes', () => {
         type: 'feature',
         altText: 'b',
         provider: 'upload',
+        submissionId: 'sub-2',
       });
 
       const { GET } = await import('@/app/api/images/route');
       const request = new NextRequest('http://localhost/api/images');
       const response = await GET(request);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(400);
       const data = await response.json();
-      expect(data.images).toHaveLength(2);
+      expect(data.error).toBeDefined();
+      expect(data.images).toBeUndefined();
+    });
+
+    it('returns 400 when submissionId is present but blank', async () => {
+      const { GET } = await import('@/app/api/images/route');
+      const request = new NextRequest('http://localhost/api/images?submissionId=%20');
+      const response = await GET(request);
+
+      expect(response.status).toBe(400);
     });
 
     it('returns an empty list when nothing is stored', async () => {
