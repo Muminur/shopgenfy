@@ -45,20 +45,22 @@ describe('Landing Page', () => {
       expect(screen.getByText(/powerful features/i)).toBeInTheDocument();
     });
 
-    it('should display AI-powered analysis feature', () => {
+    it('should display the multi-source analysis feature', () => {
       render(<LandingPage />);
-      expect(screen.getByText(/ai landing page analysis/i)).toBeInTheDocument();
+      // Copy reflects the actual three input sources (website/GitHub/local
+      // source), not the pre-revival "landing page only" wording.
+      expect(screen.getByText(/three ways in/i)).toBeInTheDocument();
     });
 
-    it('should display image generation feature', () => {
+    it('should display the compliant image generation feature', () => {
       render(<LandingPage />);
-      expect(screen.getByText(/smart image generation/i)).toBeInTheDocument();
+      expect(screen.getByText(/compliant images, generated/i)).toBeInTheDocument();
     });
 
-    it('should display export feature', () => {
+    it('should display the export feature', () => {
       render(<LandingPage />);
       // Use getAllByText since "export" appears multiple times
-      expect(screen.getAllByText(/one-click export/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/one export, ready to submit/i).length).toBeGreaterThan(0);
     });
   });
 

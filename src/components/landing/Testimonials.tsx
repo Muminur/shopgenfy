@@ -66,8 +66,11 @@ export function Testimonials() {
                   &ldquo;{testimonial.quote}&rdquo;
                 </blockquote>
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-primary">
+                  {/* accent/accent-foreground, not primary/10 + text-primary —
+                      that pairing only reaches 4.37:1 against the current
+                      brand hue, below the 4.5:1 floor (verified via axe). */}
+                  <div className="h-10 w-10 rounded-full bg-accent flex items-center justify-center">
+                    <span className="text-sm font-semibold text-accent-foreground">
                       {testimonial.author
                         .split(' ')
                         .map((n) => n[0])
