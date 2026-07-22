@@ -72,7 +72,6 @@ jobs:
           MONGODB_URI: mongodb://localhost:27017
           MONGODB_DB_NAME: shopgenfy_test
           GEMINI_API_KEY: test-key
-          NANO_BANANA_API_KEY: test-key
 
       # Coverage temporarily disabled - investigate exit code 1 issue separately
       # - name: Upload coverage report
@@ -105,7 +104,6 @@ jobs:
           MONGODB_URI: mongodb://localhost:27017
           MONGODB_DB_NAME: shopgenfy
           GEMINI_API_KEY: placeholder
-          NANO_BANANA_API_KEY: placeholder
 
   e2e:
     name: E2E Tests (Playwright)
@@ -145,7 +143,6 @@ jobs:
           MONGODB_URI: mongodb://localhost:27017
           MONGODB_DB_NAME: shopgenfy_e2e
           GEMINI_API_KEY: test-key
-          NANO_BANANA_API_KEY: test-key
 
       - name: Run E2E tests
         run: npm run test:e2e -- --project=chromium
@@ -153,7 +150,6 @@ jobs:
           MONGODB_URI: mongodb://localhost:27017
           MONGODB_DB_NAME: shopgenfy_e2e
           GEMINI_API_KEY: test-key
-          NANO_BANANA_API_KEY: test-key
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
