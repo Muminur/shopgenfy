@@ -4,6 +4,7 @@ import { normalizeImage, ImageNormalizeError } from '@/lib/image-normalizer';
 import { imageStore } from '@/lib/image-store';
 import { z } from 'zod';
 import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
+import { COMPLIANCE_WARNING } from '@/lib/validators/constants';
 
 const generateImageSchema = z.object({
   type: z.enum(['icon', 'feature'], { message: 'Image type must be "icon" or "feature"' }),
@@ -64,11 +65,17 @@ export async function POST(request: NextRequest) {
       submissionId,
     });
 
+    // Pollinations has no screenshot-reference capability at all, so every
+    // feature image it produces is prompt-only and must carry the Shopify
+    // 4.4.4 compliance warning. Icons are exempt (4.4.4 concerns listing
+    // imagery that shows actual UI, not the app icon).
+    const warnings = type === 'feature' ? [COMPLIANCE_WARNING] : [];
+
     return NextResponse.json({
       image: stored,
       jobId: result.jobId,
       status: result.status,
-      warnings: [],
+      warnings,
     });
   } catch (error) {
     if (error instanceof NanoBananaError) {

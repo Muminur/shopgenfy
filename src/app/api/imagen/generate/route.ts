@@ -9,11 +9,9 @@ import {
 import { normalizeImage, ImageNormalizeError } from '@/lib/image-normalizer';
 import { imageStore, StoredImage } from '@/lib/image-store';
 import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
+import { COMPLIANCE_WARNING } from '@/lib/validators/constants';
 
 export const maxDuration = 60; // Allow up to 60 seconds for image generation
-
-const COMPLIANCE_WARNING =
-  'Prompt-only feature image generated without real app screenshots; may not satisfy Shopify listing rule 4.4.4.';
 
 interface GenerateRequest {
   type: 'icon' | 'feature' | 'all';

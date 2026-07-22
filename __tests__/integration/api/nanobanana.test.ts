@@ -112,7 +112,8 @@ describe('Nano Banana API Routes (store-backed)', () => {
       expect(data.image.width).toBe(1200);
       expect(data.image.height).toBe(1200);
       expect(data.image.provider).toBe('pollinations');
-      expect(Array.isArray(data.warnings)).toBe(true);
+      // Icons are exempt from the Shopify 4.4.4 listing-imagery rule.
+      expect(data.warnings).toEqual([]);
 
       const stored = imageStore.get(idFromUrl(data.image.url));
       expect(stored).toBeDefined();
@@ -159,6 +160,43 @@ describe('Nano Banana API Routes (store-backed)', () => {
       const meta = await sharp(imageStore.get(idFromUrl(data.image.url))!.buffer).metadata();
       expect(meta.width).toBe(1600);
       expect(meta.height).toBe(900);
+    });
+
+    it('emits the Shopify 4.4.4 compliance warning for feature images (prompt-only, no screenshot capability)', async () => {
+      const mockResult = {
+        jobId: 'pollinations-feature-789',
+        status: 'completed',
+        imageUrl: 'https://image.pollinations.ai/prompt/feature',
+        width: 1600,
+        height: 900,
+        format: 'png',
+        buffer: await pngBytes(1408, 768),
+      };
+
+      const { createNanoBananaClient } = await import('@/lib/nanobanana');
+      (createNanoBananaClient as ReturnType<typeof vi.fn>).mockReturnValue({
+        generateImage: vi.fn().mockResolvedValue(mockResult),
+      });
+
+      const { POST } = await import('@/app/api/nanobanana/generate/route');
+      const request = new NextRequest('http://localhost/api/nanobanana/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'feature',
+          prompt: 'A feature image showing dashboard',
+          featureHighlight: 'Real-time analytics',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      const data = await response.json();
+
+      // Pollinations is always prompt-only (no screenshot-reference path
+      // exists here), so every feature image must carry the 4.4.4 warning.
+      expect(data.warnings.length).toBeGreaterThan(0);
+      expect(data.warnings.join(' ')).toMatch(/4\.4\.4/);
     });
 
     it('returns 400 for missing type', async () => {

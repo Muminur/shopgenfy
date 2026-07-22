@@ -1,3 +1,8 @@
+// Shared across every prompt-only image-generation route (Pollinations, Imagen)
+// so the exact wording never drifts between providers.
+export const COMPLIANCE_WARNING =
+  'Prompt-only feature image generated without real app screenshots; may not satisfy Shopify listing rule 4.4.4.';
+
 export const SHOPIFY_LIMITS = {
   APP_NAME_MAX: 30,
   APP_INTRODUCTION_MAX: 100,
