@@ -23,8 +23,10 @@ Endpoints are rate-limited per client IP (sliding window):
 | `POST /api/nanobanana/generate` | 5 requests/minute |
 | `POST /api/imagen/generate` | 5 requests/minute |
 | `POST /api/nanobanana/batch` | 2 requests/minute |
+| `POST /api/screenshots/upload` | 20 requests/minute (sized for a full folder-upload batch) |
+| `POST /api/export` | 10 requests/minute |
 
-`POST /api/screenshots/upload`, `GET/POST /api/images*`, and `POST /api/export` are not currently rate-limited.
+`GET/POST /api/images*` is not rate-limited (cheap metadata/byte reads keyed on unguessable ids).
 
 Rate limit headers are included on limited responses:
 - `X-RateLimit-Limit`: Maximum requests allowed
@@ -220,9 +222,11 @@ Generates a single image via the free Pollinations.ai path. The raw bytes are no
   },
   "jobId": "job_123",
   "status": "completed",
-  "warnings": []
+  "warnings": ["Prompt-only feature image generated without real app screenshots; may not satisfy Shopify listing rule 4.4.4."]
 }
 ```
+
+Pollinations has no screenshot-reference capability, so every `feature`-type image it generates is prompt-only — the compliance warning above is therefore always present for `type: "feature"`. Icon requests are exempt (4.4.4 concerns listing/feature imagery, not the app icon) and always return `warnings: []`.
 
 **Status codes**: `400` invalid body, `502` upstream/normalization failure, `500` other failure.
 
@@ -306,14 +310,16 @@ Generates icon + feature images for a **saved** submission (reads it from the da
 
 #### GET /api/images
 
-Lists stored image metadata (no bytes), optionally filtered to one submission.
+Lists stored image metadata (no bytes) for one submission.
 
-**Query Parameters**: `submissionId` (optional)
+**Query Parameters**: `submissionId` (**required** — the route never enumerates the whole store, to prevent one client from listing another's images)
 
 **Response**
 ```json
 { "images": [{ "id": "...", "url": "/api/images/...", "width": 1200, "height": 1200, "type": "icon", "provider": "gemini", "createdAt": 1753000000000 }] }
 ```
+
+**Status codes**: `200` (possibly empty array), `400` missing/blank `submissionId`.
 
 #### GET /api/images/[id]
 
