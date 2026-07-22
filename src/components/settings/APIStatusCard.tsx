@@ -46,7 +46,15 @@ function StatusIndicator({ name, status, ariaLabel }: StatusIndicatorProps) {
           aria-hidden="true"
         />
         <span
-          className={cn('text-sm font-medium', isConnected ? 'text-green-600' : 'text-red-600')}
+          className={cn(
+            'text-sm font-medium',
+            // On white (light mode) the -600 shades miss WCAG AA for 14px text:
+            // green-600 (#00a63e) is only 3.21:1. green-700 (#008236) = 4.94:1
+            // and red-700 (#c10007) = 6.4:1 both clear the 4.5:1 floor. Dark
+            // mode keeps the -600 shades, which have ample contrast on the dark
+            // card background.
+            isConnected ? 'text-green-700 dark:text-green-600' : 'text-red-700 dark:text-red-600'
+          )}
         >
           {isConnected ? 'Connected' : 'Disconnected'}
         </span>
