@@ -5,6 +5,8 @@
  * for AI analysis, removing scripts, styles, and other non-content elements.
  */
 
+import { lookup } from 'node:dns/promises';
+
 export class WebpageFetchError extends Error {
   constructor(
     message: string,
@@ -72,6 +74,135 @@ function isSafeUrl(url: URL): boolean {
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+/** Maximum redirect hops any fetch through this module will follow. */
+const MAX_REDIRECTS = 5;
+
+/**
+ * Decide whether a resolved IP address targets a private, loopback, link-local,
+ * or otherwise non-routable range. This is the check the string-based
+ * `isSafeUrl` cannot make: a public-looking hostname can resolve (via DNS) to an
+ * internal IP, and a redirect can point at one.
+ */
+function isBlockedIpAddress(ip: string): boolean {
+  let addr = ip.toLowerCase().trim();
+
+  // Unwrap IPv4-mapped/compat IPv6 forms such as ::ffff:169.254.169.254.
+  const mapped = addr.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mapped) {
+    addr = mapped[1];
+  }
+
+  // IPv4
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(addr)) {
+    const [a, b] = addr.split('.').map((part) => parseInt(part, 10));
+    if (a === 0) return true; // "this" network / 0.0.0.0
+    if (a === 127) return true; // loopback
+    if (a === 10) return true; // RFC1918
+    if (a === 172 && b >= 16 && b <= 31) return true; // RFC1918
+    if (a === 192 && b === 168) return true; // RFC1918
+    if (a === 169 && b === 254) return true; // link-local + cloud metadata (169.254.0.0/16)
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT (RFC6598)
+    return false;
+  }
+
+  // IPv6
+  if (addr === '::1' || addr === '::') return true; // loopback / unspecified
+  if (/^fe[89ab][0-9a-f]:/.test(addr)) return true; // link-local fe80::/10
+  if (/^f[cd][0-9a-f]{2}:/.test(addr)) return true; // unique local address fc00::/7
+  return false;
+}
+
+/**
+ * Full safety check for a URL about to be fetched: the synchronous string check
+ * first (fast rejection of literal internal hosts/IPs), then DNS resolution with
+ * every returned address validated against the blocklist. Any unresolved or
+ * blocked address makes the URL unsafe.
+ */
+async function isSafeUrlWithDns(url: URL): Promise<boolean> {
+  // Fast string-based rejection first (literal internal hostnames / IPs).
+  if (!isSafeUrl(url)) {
+    return false;
+  }
+
+  const hostname = url.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+
+  let resolved: Array<{ address: string }>;
+  try {
+    resolved = await lookup(hostname, { all: true });
+  } catch {
+    // A hostname we cannot resolve is treated as unsafe rather than handed to
+    // fetch (which would resolve it itself, unchecked).
+    return false;
+  }
+
+  if (!resolved || resolved.length === 0) {
+    return false;
+  }
+
+  for (const { address } of resolved) {
+    if (isBlockedIpAddress(address)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * SSRF-hardened fetch. Validates the target (string + DNS) before every hop,
+ * follows redirects manually so each `Location` is re-validated (an attacker
+ * server cannot 302 us to an internal address), and caps the redirect chain.
+ * Throws {@link WebpageFetchError} for unsafe targets or excessive redirects.
+ */
+async function safeFetch(url: string, init: RequestInit, timeout: number): Promise<Response> {
+  let currentUrl = url;
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+    let parsed: URL;
+    try {
+      parsed = new URL(currentUrl);
+    } catch {
+      throw new WebpageFetchError('Invalid URL format');
+    }
+
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new WebpageFetchError('Only HTTP and HTTPS URLs are allowed');
+    }
+
+    if (!(await isSafeUrlWithDns(parsed))) {
+      throw new WebpageFetchError('URL targets a blocked network (SSRF protection)');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    let response: Response;
+    try {
+      response = await fetch(currentUrl, {
+        ...init,
+        signal: controller.signal,
+        // Manual so we re-validate each redirect target before following it.
+        redirect: 'manual',
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    // 3xx (except 304 Not Modified) is a redirect we handle ourselves.
+    if (response.status >= 300 && response.status < 400 && response.status !== 304) {
+      const location = response.headers.get('location');
+      if (!location) {
+        return response;
+      }
+      currentUrl = new URL(location, currentUrl).href;
+      continue;
+    }
+
+    return response;
+  }
+
+  throw new WebpageFetchError('Too many redirects');
+}
 
 /**
  * Extract image URLs from HTML string
@@ -353,27 +484,20 @@ export async function fetchWebpageContent(
     throw new WebpageFetchError('Only HTTP and HTTPS URLs are allowed');
   }
 
-  // SSRF protection - block internal/private networks
-  if (!isSafeUrl(parsedUrl)) {
-    throw new WebpageFetchError('URL targets a blocked network (SSRF protection)');
-  }
-
-  // Create abort controller for timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
+  // SSRF protection: full validation (string + DNS) happens inside safeFetch on
+  // every hop, including redirect targets, which are followed manually.
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
+    const response = await safeFetch(
+      url,
+      {
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
       },
-      signal: controller.signal,
-      redirect: 'follow',
-    });
-
-    clearTimeout(timeoutId);
+      timeout
+    );
 
     if (!response.ok) {
       throw new WebpageFetchError(
@@ -391,8 +515,6 @@ export async function fetchWebpageContent(
     const html = await response.text();
     return extractTextFromHtml(html, maxLength);
   } catch (error) {
-    clearTimeout(timeoutId);
-
     if (error instanceof WebpageFetchError) {
       throw error;
     }
@@ -430,27 +552,20 @@ export async function fetchWebpageWithImages(
     throw new WebpageFetchError('Only HTTP and HTTPS URLs are allowed');
   }
 
-  // SSRF protection - block internal/private networks
-  if (!isSafeUrl(parsedUrl)) {
-    throw new WebpageFetchError('URL targets a blocked network (SSRF protection)');
-  }
-
-  // Create abort controller for timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
+  // SSRF protection: full validation (string + DNS) happens inside safeFetch on
+  // every hop, including redirect targets, which are followed manually.
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
+    const response = await safeFetch(
+      url,
+      {
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
       },
-      signal: controller.signal,
-      redirect: 'follow',
-    });
-
-    clearTimeout(timeoutId);
+      timeout
+    );
 
     if (!response.ok) {
       throw new WebpageFetchError(
@@ -471,8 +586,6 @@ export async function fetchWebpageWithImages(
 
     return { text, images };
   } catch (error) {
-    clearTimeout(timeoutId);
-
     if (error instanceof WebpageFetchError) {
       throw error;
     }
@@ -508,26 +621,19 @@ export async function fetchImageAsBase64(
     return null;
   }
 
-  // SSRF protection - block internal/private networks
-  if (!isSafeUrl(parsedUrl)) {
-    return null;
-  }
-
-  // Check content length header before downloading
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
+  // SSRF protection: full validation (string + DNS) happens inside safeFetch on
+  // every hop, including redirect targets, which are followed manually.
   try {
-    const response = await fetch(imageUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'image/*',
+    const response = await safeFetch(
+      imageUrl,
+      {
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: 'image/*',
+        },
       },
-      signal: controller.signal,
-      redirect: 'follow',
-    });
-
-    clearTimeout(timeoutId);
+      timeout
+    );
 
     if (!response.ok) {
       return null;
@@ -558,7 +664,6 @@ export async function fetchImageAsBase64(
 
     return { base64, mimeType };
   } catch {
-    clearTimeout(timeoutId);
     return null;
   }
 }

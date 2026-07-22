@@ -76,8 +76,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode || 500 });
     }
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[/api/gemini/analyze] Non-GeminiError:', errorMessage);
-    return NextResponse.json({ error: `Failed to analyze URL: ${errorMessage}` }, { status: 500 });
+    // Log the underlying detail server-side only; never reflect it to the client
+    // (fetch/DNS error strings can leak internal hostnames/IPs and aid SSRF probing).
+    const errorDetail = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[/api/gemini/analyze] Non-GeminiError:', errorDetail);
+    return NextResponse.json(
+      { error: 'Failed to analyze URL. Please try again later.' },
+      { status: 500 }
+    );
   }
 }
