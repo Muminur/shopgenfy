@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { MongoClient, Db } from 'mongodb';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { createAPIVersionManager, type APIVersionManager } from '@/lib/api-version-manager';
 import { type GeminiClient } from '@/lib/gemini';
 import { type NanoBananaClient } from '@/lib/nanobanana';
@@ -11,6 +12,7 @@ import { COLLECTIONS } from '@/lib/db/collections';
  * Focuses on: version tracking, auto-updates, rollback mechanisms
  */
 describe('API Version Manager - Integration Tests', () => {
+  let mongoServer: MongoMemoryServer;
   let client: MongoClient;
   let db: Db;
   let manager: APIVersionManager;
@@ -18,8 +20,10 @@ describe('API Version Manager - Integration Tests', () => {
   let mockNanoBananaClient: NanoBananaClient;
 
   beforeAll(async () => {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-    client = new MongoClient(mongoUri);
+    // Hermetic DB — no external mongod required (mirrors the other integration
+    // DB suites). Keeps this suite green with zero environmental dependencies.
+    mongoServer = await MongoMemoryServer.create();
+    client = new MongoClient(mongoServer.getUri());
     await client.connect();
     db = client.db('shopify_test_api_versions');
   });
@@ -30,6 +34,9 @@ describe('API Version Manager - Integration Tests', () => {
     }
     if (client) {
       await client.close();
+    }
+    if (mongoServer) {
+      await mongoServer.stop();
     }
   });
 
@@ -67,6 +74,18 @@ describe('API Version Manager - Integration Tests', () => {
         confidence: 0.9,
         screenshots: [],
       }),
+      analyzeContent: async (_content) => ({
+        appName: 'Test App',
+        appIntroduction: 'Test intro',
+        appDescription: 'Test description',
+        featureList: ['Feature 1'],
+        languages: ['en'],
+        primaryCategory: 'Store design',
+        featureTags: ['test'],
+        pricing: { type: 'free' as const },
+        confidence: 0.9,
+        screenshots: [],
+      }),
     };
 
     mockNanoBananaClient = {
@@ -74,14 +93,6 @@ describe('API Version Manager - Integration Tests', () => {
         jobId: 'job-123',
         status: 'completed' as const,
         imageUrl: 'https://cdn.nanobanana.io/test.png',
-        width: 1200,
-        height: 1200,
-        format: 'png' as const,
-      }),
-      regenerateImage: async (_imageId) => ({
-        jobId: 'job-regen-123',
-        status: 'completed' as const,
-        imageUrl: 'https://cdn.nanobanana.io/regen.png',
         width: 1200,
         height: 1200,
         format: 'png' as const,
@@ -382,7 +393,7 @@ describe('API Version Manager - Integration Tests', () => {
 
       await expect(manager.checkGeminiVersion()).rejects.toThrow();
 
-      client = new MongoClient(process.env.MONGODB_URI || 'mongodb://localhost:27017');
+      client = new MongoClient(mongoServer.getUri());
       await client.connect();
       db = client.db('shopify_test_api_versions');
       manager = createAPIVersionManager(db, mockGeminiClient, mockNanoBananaClient);

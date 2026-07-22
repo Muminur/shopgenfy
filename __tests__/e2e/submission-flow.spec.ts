@@ -1,5 +1,41 @@
 import { test, expect } from '@playwright/test';
 
+// Mock the analyze + submissions APIs at the browser level so the flow is
+// hermetic (no live webpage fetch, no dependence on a real DB document).
+const mockAnalysis = {
+  appName: 'Flow Test App',
+  appIntroduction: 'A tagline for the flow',
+  appDescription: 'A description produced by the mocked analyze endpoint for the submission flow.',
+  featureList: ['Feature A', 'Feature B'],
+  languages: ['en'],
+  primaryCategory: 'Store design',
+  featureTags: ['test'],
+  pricing: { type: 'free' },
+  confidence: 0.9,
+  screenshots: [],
+};
+
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/gemini/analyze', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(mockAnalysis),
+    });
+  });
+  await page.route('**/api/submissions**', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'submission-flow-1', status: 'draft' }),
+      });
+    } else {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    }
+  });
+});
+
 test.describe('Submission Flow E2E', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/dashboard');
@@ -7,18 +43,23 @@ test.describe('Submission Flow E2E', () => {
 
   test('complete submission flow: URL analysis to form save', async ({ page }) => {
     // Step 1: Enter URL for analysis
-    const urlInput = page.getByPlaceholder(/url|website|landing/i);
+    const urlInput = page.getByPlaceholder('https://your-app.com');
     await expect(urlInput).toBeVisible();
     await urlInput.fill('https://example.com');
 
     // Step 2: Click analyze button
-    const analyzeButton = page.getByRole('button', { name: /analyze/i });
+    const analyzeButton = page.getByRole('button', { name: /analyze with ai/i });
     await analyzeButton.click();
 
     // Step 3: Wait for analysis to complete (loading state)
     const loadingIndicator = page.getByRole('status').or(page.getByText(/analyzing|loading/i));
-    if (await loadingIndicator.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await expect(loadingIndicator).toBeHidden({ timeout: 60000 });
+    if (
+      await loadingIndicator
+        .first()
+        .isVisible({ timeout: 2000 })
+        .catch(() => false)
+    ) {
+      await expect(loadingIndicator.first()).toBeHidden({ timeout: 60000 });
     }
 
     // Step 4: Verify form fields are auto-filled (check at least app name)
@@ -40,13 +81,13 @@ test.describe('Submission Flow E2E', () => {
     }
 
     // Step 5: Save submission
-    const saveButton = page.getByRole('button', { name: /save|create|submit/i });
+    const saveButton = page.getByRole('button', { name: /save|create|submit/i }).first();
     if (await saveButton.isVisible()) {
       await saveButton.click();
 
       // Wait for save confirmation
       const successMessage = page.getByRole('alert').or(page.getByText(/saved|created|success/i));
-      await expect(successMessage).toBeVisible({ timeout: 10000 });
+      await expect(successMessage.first()).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -67,12 +108,12 @@ test.describe('Submission Flow E2E', () => {
   });
 
   test('validate character limits', async ({ page }) => {
-    // Test app name limit (30 chars)
+    // Test app name limit (30 chars). The input caps at maxLength, so the
+    // counter reads exactly 30/30 once the limit is reached.
     const appNameInput = page.getByLabel(/app name/i);
     await appNameInput.fill('This is a very long app name that exceeds thirty characters');
 
-    // Character counter should show exceeded state
-    const charCount = page.getByText(/3[0-9]|[4-9][0-9]/);
+    const charCount = page.getByText(/30\s*\/\s*30/);
     await expect(charCount).toBeVisible();
   });
 
@@ -98,23 +139,26 @@ test.describe('Submission Flow E2E', () => {
     const saveIndicator = page.getByText(/saving|saved|auto.?save/i);
 
     // If auto-save is implemented, indicator should appear
-    if (await saveIndicator.isVisible({ timeout: 35000 }).catch(() => false)) {
-      await expect(saveIndicator).toContainText(/saved|auto.?saved/i, { timeout: 5000 });
+    if (
+      await saveIndicator
+        .first()
+        .isVisible({ timeout: 35000 })
+        .catch(() => false)
+    ) {
+      await expect(saveIndicator.first()).toContainText(/saved|auto.?saved/i, { timeout: 5000 });
     }
   });
 
   test('URL validation for landing page input', async ({ page }) => {
-    const urlInput = page.getByPlaceholder(/url|website|landing/i);
+    const urlInput = page.getByPlaceholder('https://your-app.com');
 
     // Test invalid URL
     await urlInput.fill('not-a-valid-url');
 
-    const analyzeButton = page.getByRole('button', { name: /analyze/i });
-    await analyzeButton.click();
+    const analyzeButton = page.getByRole('button', { name: /analyze with ai/i });
 
-    // Should show validation error
-    const errorMessage = page.getByRole('alert').or(page.getByText(/invalid|valid url/i));
-    await expect(errorMessage).toBeVisible({ timeout: 5000 });
+    // The analyze button should be disabled for an invalid URL.
+    await expect(analyzeButton).toBeDisabled();
   });
 
   test('add and remove feature list items', async ({ page }) => {
@@ -124,8 +168,8 @@ test.describe('Submission Flow E2E', () => {
     if (await addFeatureButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await addFeatureButton.click();
 
-      // New input should appear
-      const featureInputs = page.getByLabel(/feature|feature list/i);
+      // New input should appear (feature inputs use placeholders "Feature N").
+      const featureInputs = page.getByPlaceholder(/feature/i);
       const inputCount = await featureInputs.count();
       expect(inputCount).toBeGreaterThan(0);
 
@@ -144,10 +188,11 @@ test.describe('Submission Flow E2E', () => {
   });
 
   test('form progress indicator', async ({ page }) => {
-    // Check for progress indicator
+    // Check for progress indicator (progressbar + the "% Complete" text both exist)
     const progressIndicator = page
       .getByRole('progressbar')
-      .or(page.getByText(/progress|completion|%|step \d+ of \d+/i));
+      .or(page.getByText(/progress|completion|%|step \d+ of \d+/i))
+      .first();
 
     if (await progressIndicator.isVisible()) {
       // Progress should update as fields are filled
@@ -161,48 +206,49 @@ test.describe('Submission Flow E2E', () => {
 });
 
 test.describe('Submission Flow - Edge Cases', () => {
-  test('handle network errors gracefully', async ({ page, context }) => {
-    // Simulate offline
-    await context.setOffline(true);
-
+  test('handle network errors gracefully', async ({ page }) => {
     await page.goto('/dashboard');
 
-    const urlInput = page.getByPlaceholder(/url|website|landing/i);
+    // Abort just the analyze API (not the whole network — that would block the
+    // page load) so the client error path is exercised.
+    await page.route('**/api/gemini/analyze', (route) => route.abort());
+
+    const urlInput = page.getByPlaceholder('https://your-app.com');
     await urlInput.fill('https://example.com');
 
-    const analyzeButton = page.getByRole('button', { name: /analyze/i });
+    const analyzeButton = page.getByRole('button', { name: /analyze with ai/i });
     await analyzeButton.click();
 
     // Should show error message
     const errorMessage = page
       .getByRole('alert')
-      .or(page.getByText(/error|network|offline|connection/i));
-    await expect(errorMessage).toBeVisible({ timeout: 10000 });
-
-    // Restore online
-    await context.setOffline(false);
+      .or(page.getByText(/error|network|offline|connection|failed/i));
+    await expect(errorMessage.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('handle API timeout', async ({ page }) => {
-    // Start analysis that might timeout
-    const urlInput = page.getByPlaceholder(/url|website|landing/i);
+    await page.goto('/dashboard');
+
+    // Start analysis (mocked to succeed) — an alert should appear either way.
+    const urlInput = page.getByPlaceholder('https://your-app.com');
     await urlInput.fill('https://example.com');
 
-    const analyzeButton = page.getByRole('button', { name: /analyze/i });
+    const analyzeButton = page.getByRole('button', { name: /analyze with ai/i });
     await analyzeButton.click();
 
-    // Wait for potential timeout error (most APIs timeout after 30-60s)
     const errorOrSuccess = page.getByRole('alert');
-    await expect(errorOrSuccess).toBeVisible({ timeout: 90000 });
+    await expect(errorOrSuccess.first()).toBeVisible({ timeout: 90000 });
   });
 
   test('prevent duplicate submissions', async ({ page }) => {
+    await page.goto('/dashboard');
+
     // Fill required fields
     const appNameInput = page.getByLabel(/app name/i);
     await appNameInput.fill('Duplicate Test App');
 
     // Click save button multiple times quickly
-    const saveButton = page.getByRole('button', { name: /save|create|submit/i });
+    const saveButton = page.getByRole('button', { name: /save|create|submit/i }).first();
 
     if (await saveButton.isVisible()) {
       // First click

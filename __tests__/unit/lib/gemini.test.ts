@@ -3,10 +3,13 @@ import {
   GeminiClient,
   createGeminiClient,
   GeminiError,
+  matchShopifyCategory,
   type GeminiModel,
   type GeminiGenerateOptions,
   type GeminiAnalysisResult,
+  type PreparedContent,
 } from '@/lib/gemini';
+import { clearDeadModelCache } from '@/lib/model-resolver';
 
 // Mock the webpage-fetcher module
 vi.mock('@/lib/webpage-fetcher', () => ({
@@ -365,6 +368,75 @@ describe('GeminiClient', () => {
       );
     });
 
+    it('retries with the fallback model when the resolved model is retired', async () => {
+      clearDeadModelCache();
+
+      const mockAnalysis = {
+        appName: 'Recovered App',
+        appIntroduction: 'Works after fallback',
+        appDescription: 'The first model was retired but the fallback succeeded.',
+        featureList: ['Feature A'],
+        languages: ['en'],
+        primaryCategory: 'Store design',
+        featureTags: ['recovery'],
+        pricing: { type: 'free' as const },
+        confidence: 0.7,
+      };
+
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
+
+      global.fetch = vi
+        .fn()
+        // First attempt: the default resolved model (gemini-flash-latest) is retired
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+          headers: { get: () => null },
+          json: () =>
+            Promise.resolve({
+              error: {
+                code: 404,
+                status: 'NOT_FOUND',
+                message:
+                  'This model models/gemini-flash-latest is no longer available. Please see the docs for currently available models.',
+              },
+            }),
+        })
+        // Second attempt: the next candidate (gemini-3.5-flash) succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              candidates: [
+                {
+                  content: { parts: [{ text: JSON.stringify(mockAnalysis) }], role: 'model' },
+                  finishReason: 'STOP',
+                },
+              ],
+            }),
+        });
+
+      const result = await client.analyzeUrl('https://example.com/app');
+
+      const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[0][0]).toContain('gemini-flash-latest');
+      expect(fetchMock.mock.calls[1][0]).toContain('gemini-3.5-flash');
+
+      expect(result.appName).toBe('Recovered App');
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings).toContain(
+        'Model gemini-flash-latest unavailable; used gemini-3.5-flash'
+      );
+
+      clearDeadModelCache();
+    });
+
     it('should apply Shopify limits to extracted content', async () => {
       const longName = 'A'.repeat(50);
       const mockAnalysis = {
@@ -406,6 +478,145 @@ describe('GeminiClient', () => {
       const result = await client.analyzeUrl('https://example.com');
 
       expect(result.appName.length).toBeLessThanOrEqual(30);
+    });
+
+    it('fuzzy-matches the primaryCategory to a canonical Shopify category', async () => {
+      const mockAnalysis = {
+        appName: 'Sales Booster',
+        appIntroduction: 'Boost sales',
+        appDescription: 'Helps merchants sell more.',
+        featureList: ['Upsell'],
+        languages: ['en'],
+        // Model returned a loose label — must resolve to the canonical value.
+        primaryCategory: 'Sales',
+        featureTags: [],
+        pricing: { type: 'free' },
+        confidence: 0.9,
+      };
+
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: { parts: [{ text: JSON.stringify(mockAnalysis) }], role: 'model' },
+                finishReason: 'STOP',
+              },
+            ],
+          }),
+      });
+
+      const result = await client.analyzeUrl('https://example.com');
+
+      expect(result.primaryCategory).toBe('Sales and conversion');
+    });
+
+    it('drops an unrecognized primaryCategory to an empty string', async () => {
+      const mockAnalysis = {
+        appName: 'Weird App',
+        appIntroduction: 'Does weird things',
+        appDescription: 'An app that does not fit any category.',
+        featureList: ['Weirdness'],
+        languages: ['en'],
+        primaryCategory: 'Totally Made Up Category',
+        featureTags: [],
+        pricing: { type: 'free' },
+        confidence: 0.9,
+      };
+
+      vi.mocked(fetchWebpageWithImages).mockResolvedValueOnce({
+        text: mockPageContent,
+        images: [],
+      });
+      vi.mocked(fetchImageAsBase64).mockResolvedValue(null);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: { parts: [{ text: JSON.stringify(mockAnalysis) }], role: 'model' },
+                finishReason: 'STOP',
+              },
+            ],
+          }),
+      });
+
+      const result = await client.analyzeUrl('https://example.com');
+
+      expect(result.primaryCategory).toBe('');
+    });
+  });
+
+  describe('analyzeContent', () => {
+    it('runs the shared pipeline for arbitrary content and maps images to screenshots', async () => {
+      clearDeadModelCache();
+
+      const content: PreparedContent = {
+        title: 'is-online',
+        description: 'Check if the internet connection is up',
+        textContent:
+          'is-online lets merchants verify connectivity from Node and the browser with a tiny, dependency-light API.',
+        images: [{ base64: 'aW1nMQ==', mimeType: 'image/png' }],
+        sourceLabel: 'GitHub repository sindresorhus/is-online',
+      };
+
+      const mockAnalysis = {
+        appName: 'is-online',
+        appIntroduction: 'Know when your store is reachable',
+        appDescription: 'Detects connectivity so storefront actions never silently fail.',
+        featureList: ['Connectivity checks'],
+        languages: ['en'],
+        primaryCategory: 'Store management',
+        featureTags: ['connectivity'],
+        pricing: { type: 'free' as const },
+        confidence: 0.8,
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: { parts: [{ text: JSON.stringify(mockAnalysis) }], role: 'model' },
+                finishReason: 'STOP',
+              },
+            ],
+          }),
+      });
+
+      const result = await client.analyzeContent(content);
+
+      expect(result.appName).toBe('is-online');
+      // Pre-downloaded images become base64-only screenshots (no source url).
+      expect(result.screenshots).toEqual([{ base64: 'aW1nMQ==', mimeType: 'image/png' }]);
+
+      // The source label is carried into the prompt preamble.
+      const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+      const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      const promptText = requestBody.contents[0].parts[0].text as string;
+      expect(promptText).toContain('GitHub repository sindresorhus/is-online');
+    });
+
+    it('rejects content with insufficient text', async () => {
+      const content: PreparedContent = {
+        title: '',
+        description: '',
+        textContent: 'too short',
+        images: [],
+        sourceLabel: 'GitHub repository owner/repo',
+      };
+
+      await expect(client.analyzeContent(content)).rejects.toThrow('insufficient content');
     });
   });
 
@@ -459,5 +670,32 @@ describe('GeminiClient', () => {
         expect((error as GeminiError).requestId).toBe('req-123');
       }
     });
+  });
+});
+
+describe('matchShopifyCategory', () => {
+  it('returns the canonical value for an exact case-insensitive match', () => {
+    expect(matchShopifyCategory('Store design')).toBe('Store design');
+    expect(matchShopifyCategory('store design')).toBe('Store design');
+    expect(matchShopifyCategory('  MARKETING  ')).toBe('Marketing');
+  });
+
+  it('resolves a prefix of a canonical category (canonical startsWith raw)', () => {
+    expect(matchShopifyCategory('Sales')).toBe('Sales and conversion');
+    expect(matchShopifyCategory('Orders')).toBe('Orders and shipping');
+  });
+
+  it('resolves a label that starts with a canonical category (raw startsWith canonical)', () => {
+    expect(matchShopifyCategory('Marketing and SEO')).toBe('Marketing');
+  });
+
+  it('returns an empty string for an unrecognized category', () => {
+    expect(matchShopifyCategory('Totally Made Up Category')).toBe('');
+  });
+
+  it('returns an empty string for empty or missing input', () => {
+    expect(matchShopifyCategory('')).toBe('');
+    expect(matchShopifyCategory(undefined)).toBe('');
+    expect(matchShopifyCategory('   ')).toBe('');
   });
 });

@@ -1,15 +1,24 @@
-import { SHOPIFY_LIMITS } from './validators/constants';
+import { SHOPIFY_LIMITS, SHOPIFY_CATEGORIES } from './validators/constants';
 import {
   fetchWebpageWithImages,
   WebpageFetchError,
   ExtractedImage,
   fetchImageAsBase64,
 } from './webpage-fetcher';
+import { resolveTextModel, markModelDead, isModelRetiredError } from './model-resolver';
 
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const DEFAULT_GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000;
+
+/**
+ * Resolve the Gemini REST base URL at call time so `GEMINI_API_BASE` can be
+ * overridden in tests / hermetic E2E (points at a local stub). Defaults to the
+ * production endpoint.
+ */
+function getGeminiApiBase(): string {
+  return process.env.GEMINI_API_BASE || DEFAULT_GEMINI_API_BASE;
+}
 
 export interface GeminiModel {
   name: string;
@@ -27,6 +36,7 @@ export interface GeminiGenerateOptions {
   topP?: number;
   topK?: number;
   stopSequences?: string[];
+  responseMimeType?: string;
 }
 
 export interface GeminiGenerateResult {
@@ -45,12 +55,35 @@ export interface GeminiStreamChunk {
 }
 
 export interface ExtractedScreenshot {
-  url: string;
+  /**
+   * Source URL of the screenshot. Present for the URL analysis path; omitted
+   * for sources (GitHub / uploads) where only the decoded bytes are carried.
+   */
+  url?: string;
   base64?: string;
   mimeType?: string;
   alt?: string;
   width?: number;
   height?: number;
+}
+
+/**
+ * Normalized, source-agnostic input to the shared analysis pipeline
+ * (`analyzeContent`). Every input source — a website URL, a GitHub repo, a
+ * pasted README, or an uploaded zip — is reduced to this shape so they share
+ * one prompt / parse / truncate implementation.
+ */
+export interface PreparedContent {
+  /** Short human title for the app/project (may be empty). */
+  title: string;
+  /** One-line description (may be empty). */
+  description: string;
+  /** The main text handed to the model (already length-capped by the source). */
+  textContent: string;
+  /** Pre-downloaded screenshot candidates as base64 bytes. */
+  images: { base64: string; mimeType: string }[];
+  /** Human-readable label naming the input type for the prompt preamble. */
+  sourceLabel: string;
 }
 
 export interface GeminiAnalysisResult {
@@ -69,6 +102,11 @@ export interface GeminiAnalysisResult {
   };
   confidence: number;
   screenshots: ExtractedScreenshot[];
+  /**
+   * Human-readable notes about degraded behavior (e.g. a retired model was
+   * skipped in favor of a fallback). Empty when the primary path succeeded.
+   */
+  warnings?: string[];
 }
 
 export class GeminiError extends Error {
@@ -89,7 +127,11 @@ export interface GeminiClient {
     prompt: string,
     options?: GeminiGenerateOptions
   ): AsyncGenerator<GeminiStreamChunk>;
-  analyzeUrl(url: string): Promise<GeminiAnalysisResult>;
+  analyzeUrl(url: string, options?: { model?: string }): Promise<GeminiAnalysisResult>;
+  analyzeContent(
+    content: PreparedContent,
+    options?: { model?: string }
+  ): Promise<GeminiAnalysisResult>;
 }
 
 async function fetchWithRetry(
@@ -150,6 +192,67 @@ function truncateToLimit(text: string, limit: number): string {
   return text.substring(0, limit - 3) + '...';
 }
 
+/**
+ * Coerce a model-supplied category label to a canonical Shopify category so an
+ * approximate value from analysis can never poison the form's category select.
+ *
+ * Matching order: exact (case-insensitive) → prefix in either direction
+ * (canonical starts with the raw label, e.g. `"Sales"` → `"Sales and
+ * conversion"`, or the raw label starts with a canonical, e.g.
+ * `"Marketing and SEO"` → `"Marketing"`) → empty string when nothing fits.
+ */
+export function matchShopifyCategory(raw?: string): string {
+  if (!raw) return '';
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) return '';
+
+  const exact = SHOPIFY_CATEGORIES.find((c) => c.toLowerCase() === normalized);
+  if (exact) return exact;
+
+  const prefix = SHOPIFY_CATEGORIES.find((c) => {
+    const lower = c.toLowerCase();
+    return lower.startsWith(normalized) || normalized.startsWith(lower);
+  });
+  return prefix ?? '';
+}
+
+/**
+ * Build the Shopify-listing extraction prompt from source-agnostic content.
+ * Shared by every input source; the `sourceLabel` preamble tells the model
+ * what kind of input it is looking at (website, GitHub repo, pasted source).
+ */
+function buildAnalysisPrompt(content: PreparedContent): string {
+  const sourceLine = content.sourceLabel ? `SOURCE: ${content.sourceLabel}\n` : '';
+  const titleLine = content.title ? `TITLE: ${content.title}\n` : '';
+  const descriptionLine = content.description ? `DESCRIPTION: ${content.description}\n` : '';
+
+  return `Analyze the following content and extract information for a Shopify App Store listing.
+
+${sourceLine}${titleLine}${descriptionLine}
+CONTENT:
+${content.textContent}
+
+---
+
+Based on the above content, extract and return a JSON object with these fields:
+- appName: The app name (max 30 characters, should start with brand term)
+- appIntroduction: A tagline (max 100 characters)
+- appDescription: Description (max 500 characters, no contact info, no superlative claims)
+- featureList: Array of key features (each max 80 characters)
+- languages: Array of language codes the app supports (default to ["en"] if unclear)
+- primaryCategory: Main category (e.g., "Store design", "Marketing", "Sales")
+- featureTags: Array of relevant tags (max 25)
+- pricing: Object with type ("free", "freemium", "paid", "subscription") and optional price/currency/billingCycle
+- confidence: Number from 0-1 indicating confidence in the extraction
+
+Ensure all content follows Shopify App Store guidelines:
+- No contact information in descriptions
+- No unverifiable claims (best, first, #1, etc.)
+- No Shopify branding references
+
+Return ONLY the JSON object, no other text.`;
+}
+
 export function createGeminiClient(apiKey: string): GeminiClient {
   if (!apiKey || apiKey.trim() === '') {
     throw new GeminiError('API key is required');
@@ -161,7 +264,7 @@ export function createGeminiClient(apiKey: string): GeminiClient {
   };
 
   async function listModels(options?: { filter?: string }): Promise<GeminiModel[]> {
-    const url = `${GEMINI_API_BASE}/models`;
+    const url = `${getGeminiApiBase()}/models`;
 
     const response = await fetchWithRetry(url, {
       method: 'GET',
@@ -184,8 +287,8 @@ export function createGeminiClient(apiKey: string): GeminiClient {
     prompt: string,
     options: GeminiGenerateOptions = {}
   ): Promise<GeminiGenerateResult> {
-    const model = options.model || DEFAULT_MODEL;
-    const url = `${GEMINI_API_BASE}/models/${model}:generateContent`;
+    const model = resolveTextModel(options.model);
+    const url = `${getGeminiApiBase()}/models/${model}:generateContent`;
 
     const requestBody = {
       contents: [
@@ -199,6 +302,7 @@ export function createGeminiClient(apiKey: string): GeminiClient {
         topP: options.topP ?? 0.95,
         topK: options.topK ?? 40,
         stopSequences: options.stopSequences,
+        ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
       },
     };
 
@@ -242,8 +346,8 @@ export function createGeminiClient(apiKey: string): GeminiClient {
     prompt: string,
     options: GeminiGenerateOptions = {}
   ): AsyncGenerator<GeminiStreamChunk> {
-    const model = options.model || DEFAULT_MODEL;
-    const url = `${GEMINI_API_BASE}/models/${model}:streamGenerateContent?alt=sse`;
+    const model = resolveTextModel(options.model);
+    const url = `${getGeminiApiBase()}/models/${model}:streamGenerateContent?alt=sse`;
 
     const requestBody = {
       contents: [
@@ -305,63 +409,56 @@ export function createGeminiClient(apiKey: string): GeminiClient {
     }
   }
 
-  async function analyzeUrl(url: string): Promise<GeminiAnalysisResult> {
-    try {
-      new URL(url);
-    } catch {
-      throw new GeminiError('Invalid URL format');
-    }
-
-    // Fetch the webpage content AND images
-    let pageContent: string;
-    let extractedImages: ExtractedImage[] = [];
-    try {
-      const result = await fetchWebpageWithImages(url, { maxLength: 12000 });
-      pageContent = result.text;
-      extractedImages = result.images;
-    } catch (error) {
-      if (error instanceof WebpageFetchError) {
-        throw new GeminiError(`Failed to fetch page: ${error.message}`, error.statusCode);
-      }
-      throw new GeminiError('Failed to fetch page content');
-    }
-
-    if (!pageContent || pageContent.trim().length < 50) {
+  /**
+   * Shared analysis pipeline for every input source. Builds the extraction
+   * prompt from `content`, calls the model (resolving/retrying across retired
+   * models and recording a warning on fallback), parses the JSON, and applies
+   * the Shopify field limits. Pre-downloaded `content.images` are surfaced as
+   * `screenshots` (base64 only) for the image-generation pipeline.
+   */
+  async function analyzeContent(
+    content: PreparedContent,
+    options?: { model?: string }
+  ): Promise<GeminiAnalysisResult> {
+    if (!content.textContent || content.textContent.trim().length < 50) {
       throw new GeminiError('Page has insufficient content to analyze');
     }
 
-    const prompt = `Analyze the following webpage content and extract information for a Shopify App Store listing.
+    const prompt = buildAnalysisPrompt(content);
+    const warnings: string[] = [];
 
-URL: ${url}
-
-PAGE CONTENT:
-${pageContent}
-
----
-
-Based on the above content, extract and return a JSON object with these fields:
-- appName: The app name (max 30 characters, should start with brand term)
-- appIntroduction: A tagline (max 100 characters)
-- appDescription: Description (max 500 characters, no contact info, no superlative claims)
-- featureList: Array of key features (each max 80 characters)
-- languages: Array of language codes the app supports (default to ["en"] if unclear)
-- primaryCategory: Main category (e.g., "Store design", "Marketing", "Sales")
-- featureTags: Array of relevant tags (max 25)
-- pricing: Object with type ("free", "freemium", "paid", "subscription") and optional price/currency/billingCycle
-- confidence: Number from 0-1 indicating confidence in the extraction
-
-Ensure all content follows Shopify App Store guidelines:
-- No contact information in descriptions
-- No unverifiable claims (best, first, #1, etc.)
-- No Shopify branding references
-
-Return ONLY the JSON object, no other text.`;
-
-    const result = await generateContent(prompt, {
-      model: DEFAULT_MODEL,
+    // JSON-hardened generation config: enforce a JSON response and give the
+    // model enough output budget for the full listing. No thinking config —
+    // 3.x models reject a blanket thinkingBudget.
+    const generationOptions: GeminiGenerateOptions = {
       temperature: 0.3,
-      maxOutputTokens: 4096,
-    });
+      maxOutputTokens: 8192,
+      responseMimeType: 'application/json',
+    };
+
+    // Resolve the text model dynamically. If the resolved model has been
+    // retired upstream, mark it dead and retry once with the next candidate so
+    // the analysis self-heals across Google's rolling model deprecations.
+    const model = resolveTextModel(options?.model);
+    let result: GeminiGenerateResult;
+    try {
+      result = await generateContent(prompt, { ...generationOptions, model });
+    } catch (error) {
+      if (
+        error instanceof GeminiError &&
+        isModelRetiredError(error.statusCode ?? 0, error.message)
+      ) {
+        markModelDead(model);
+        const fallback = resolveTextModel(options?.model);
+        if (fallback === model) {
+          throw error;
+        }
+        warnings.push(`Model ${model} unavailable; used ${fallback}`);
+        result = await generateContent(prompt, { ...generationOptions, model: fallback });
+      } else {
+        throw error;
+      }
+    }
 
     let analysis: Omit<GeminiAnalysisResult, 'screenshots'>;
     try {
@@ -373,6 +470,73 @@ Return ONLY the JSON object, no other text.`;
     } catch {
       throw new GeminiError('Failed to parse analysis response');
     }
+
+    // Pre-downloaded screenshot candidates carry only bytes (no source URL).
+    const screenshots: ExtractedScreenshot[] = content.images.map((img) => ({
+      base64: img.base64,
+      mimeType: img.mimeType,
+    }));
+
+    return {
+      appName: truncateToLimit(analysis.appName || '', SHOPIFY_LIMITS.APP_NAME_MAX),
+      appIntroduction: truncateToLimit(
+        analysis.appIntroduction || '',
+        SHOPIFY_LIMITS.APP_INTRODUCTION_MAX
+      ),
+      appDescription: truncateToLimit(
+        analysis.appDescription || '',
+        SHOPIFY_LIMITS.APP_DESCRIPTION_MAX
+      ),
+      featureList: (analysis.featureList || []).map((f: string) =>
+        truncateToLimit(f, SHOPIFY_LIMITS.FEATURE_ITEM_MAX)
+      ),
+      languages: analysis.languages || ['en'],
+      primaryCategory: matchShopifyCategory(analysis.primaryCategory),
+      featureTags: (analysis.featureTags || []).slice(0, SHOPIFY_LIMITS.FEATURE_TAGS_MAX_ITEMS),
+      pricing: analysis.pricing || { type: 'free' },
+      confidence: Math.min(1, Math.max(0, analysis.confidence || 0)),
+      screenshots,
+      warnings,
+    };
+  }
+
+  async function analyzeUrl(
+    url: string,
+    options?: { model?: string }
+  ): Promise<GeminiAnalysisResult> {
+    try {
+      new URL(url);
+    } catch {
+      throw new GeminiError('Invalid URL format');
+    }
+
+    // Fetch the webpage content AND images
+    let pageContent: string;
+    let extractedImages: ExtractedImage[] = [];
+    try {
+      const fetched = await fetchWebpageWithImages(url, { maxLength: 12000 });
+      pageContent = fetched.text;
+      extractedImages = fetched.images;
+    } catch (error) {
+      if (error instanceof WebpageFetchError) {
+        throw new GeminiError(`Failed to fetch page: ${error.message}`, error.statusCode);
+      }
+      throw new GeminiError('Failed to fetch page content');
+    }
+
+    // Run the shared pipeline. The URL path assembles its own rich screenshot
+    // objects below (preserving source url/alt/dimensions), so no images are
+    // handed to analyzeContent here.
+    const analysis = await analyzeContent(
+      {
+        title: '',
+        description: '',
+        textContent: pageContent,
+        images: [],
+        sourceLabel: url,
+      },
+      options
+    );
 
     // Fetch the top screenshots as base64 (max 5 to limit bandwidth)
     const screenshotsToFetch = extractedImages.slice(0, 5);
@@ -393,23 +557,7 @@ Return ONLY the JSON object, no other text.`;
     const validScreenshots = screenshots.filter((s) => s.base64 && s.mimeType);
 
     return {
-      appName: truncateToLimit(analysis.appName || '', SHOPIFY_LIMITS.APP_NAME_MAX),
-      appIntroduction: truncateToLimit(
-        analysis.appIntroduction || '',
-        SHOPIFY_LIMITS.APP_INTRODUCTION_MAX
-      ),
-      appDescription: truncateToLimit(
-        analysis.appDescription || '',
-        SHOPIFY_LIMITS.APP_DESCRIPTION_MAX
-      ),
-      featureList: (analysis.featureList || []).map((f: string) =>
-        truncateToLimit(f, SHOPIFY_LIMITS.FEATURE_ITEM_MAX)
-      ),
-      languages: analysis.languages || ['en'],
-      primaryCategory: analysis.primaryCategory || 'Store design',
-      featureTags: (analysis.featureTags || []).slice(0, SHOPIFY_LIMITS.FEATURE_TAGS_MAX_ITEMS),
-      pricing: analysis.pricing || { type: 'free' },
-      confidence: Math.min(1, Math.max(0, analysis.confidence || 0)),
+      ...analysis,
       screenshots: validScreenshots,
     };
   }
@@ -419,5 +567,6 @@ Return ONLY the JSON object, no other text.`;
     generateContent,
     generateContentStream,
     analyzeUrl,
+    analyzeContent,
   };
 }

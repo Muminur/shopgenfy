@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import archiver from 'archiver';
 import { getDatabaseConnected } from '@/lib/mongodb';
 import { COLLECTIONS } from '@/lib/db/collections';
+import { imageStore, StoredImageEntry } from '@/lib/image-store';
 
 interface SubmissionDocument {
   _id: ObjectId;
@@ -91,11 +92,57 @@ interface ExportMetadata {
     iconDimensions: string;
     featureImageDimensions: string;
   };
+  /**
+   * Real PNG files embedded from the in-process image store (matched by
+   * submissionId). Present when normalized images are cached on this instance.
+   */
+  embeddedImages?: Array<{
+    id: string;
+    file: string;
+    type: 'icon' | 'feature';
+    width: number;
+    height: number;
+    altText: string;
+  }>;
 }
 
 function sanitizeFilename(name: string): string {
   // Remove invalid filename characters
   return name.replace(/[/\\:*?"<>|]/g, '-').replace(/\s+/g, '_');
+}
+
+interface EmbeddedStoreImage {
+  entry: StoredImageEntry;
+  filename: string;
+}
+
+/**
+ * Pull normalized image bytes for this submission out of the in-process store
+ * and assign deterministic archive paths (`images/icon.png`,
+ * `images/feature-N.png`). Empty when the store holds nothing for the id
+ * (e.g. a fresh serverless instance) — the export still succeeds.
+ */
+function collectStoreImages(submissionId: string): EmbeddedStoreImage[] {
+  const collected: EmbeddedStoreImage[] = [];
+  let featureCount = 0;
+  let iconSeen = false;
+
+  for (const meta of imageStore.list(submissionId)) {
+    const entry = imageStore.get(meta.id);
+    if (!entry) continue;
+
+    let filename: string;
+    if (entry.meta.type === 'icon' && !iconSeen) {
+      filename = 'images/icon.png';
+      iconSeen = true;
+    } else {
+      featureCount += 1;
+      filename = `images/feature-${featureCount}.png`;
+    }
+    collected.push({ entry, filename });
+  }
+
+  return collected;
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -178,6 +225,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
     };
 
+    // Embed real PNG bytes from the in-process image store when this instance
+    // has normalized images cached for the submission.
+    const embeddedImages = collectStoreImages(id);
+    if (embeddedImages.length > 0) {
+      metadata.embeddedImages = embeddedImages.map(({ entry, filename }) => ({
+        id: entry.meta.id,
+        file: filename,
+        type: entry.meta.type,
+        width: entry.meta.width,
+        height: entry.meta.height,
+        altText: entry.meta.altText,
+      }));
+    }
+
     // Create ZIP archive using a Promise-based approach
     const zipBuffer = await new Promise<Buffer>((resolve, reject) => {
       const archive = archiver('zip', {
@@ -208,6 +269,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       // Add image manifest
       const imageManifest = generateImageManifest(iconImage, featureImages);
       archive.append(JSON.stringify(imageManifest, null, 2), { name: 'images/manifest.json' });
+
+      // Embed real PNG bytes pulled from the store (if any)
+      for (const { entry, filename } of embeddedImages) {
+        archive.append(entry.buffer, { name: filename });
+      }
 
       // Finalize archive
       archive.finalize();

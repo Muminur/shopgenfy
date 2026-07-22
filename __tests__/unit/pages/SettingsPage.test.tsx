@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import SettingsPage from '@/app/settings/page';
 
@@ -21,6 +22,25 @@ vi.mock('next/navigation', () => ({
 // Mock fetch for API calls
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
+
+// In-memory localStorage (jsdom's Storage is unreliable in this setup — the
+// runner logs a `--localstorage-file` warning and method calls throw).
+const storageBacking = new Map<string, string>();
+Object.defineProperty(window, 'localStorage', {
+  configurable: true,
+  value: {
+    getItem: (key: string) => (storageBacking.has(key) ? storageBacking.get(key)! : null),
+    setItem: (key: string, value: string) => {
+      storageBacking.set(key, String(value));
+    },
+    removeItem: (key: string) => {
+      storageBacking.delete(key);
+    },
+    clear: () => {
+      storageBacking.clear();
+    },
+  },
+});
 
 describe('Settings Page', () => {
   beforeEach(() => {
@@ -62,7 +82,7 @@ describe('Settings Page', () => {
     it('should display available models', async () => {
       render(<SettingsPage />);
       await waitFor(() => {
-        expect(screen.getByText(/gemini 2\.0 flash/i)).toBeInTheDocument();
+        expect(screen.getByText(/gemini flash latest/i)).toBeInTheDocument();
       });
     });
   });
@@ -100,6 +120,65 @@ describe('Settings Page', () => {
       render(<SettingsPage />);
       await waitFor(() => {
         expect(screen.getByRole('checkbox', { name: /enable auto-save/i })).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Screenshot Source', () => {
+    it('should render the screenshot source card with website/repo/folder options', async () => {
+      render(<SettingsPage />);
+      await waitFor(() => {
+        expect(screen.getByText('Screenshot Source')).toBeInTheDocument();
+      });
+      expect(screen.getByRole('radio', { name: /website/i })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /repo/i })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: /folder/i })).toBeInTheDocument();
+    });
+
+    it('should persist the chosen source via the settings PUT and localStorage', async () => {
+      const user = userEvent.setup();
+      render(<SettingsPage />);
+      await waitFor(() => {
+        expect(screen.getByText('Screenshot Source')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('radio', { name: /folder/i }));
+      await user.click(screen.getByRole('button', { name: /save/i }));
+
+      await waitFor(() => {
+        const putCall = mockFetch.mock.calls.find((c) => c[1]?.method === 'PUT');
+        expect(putCall).toBeTruthy();
+      });
+
+      const putCall = mockFetch.mock.calls.find((c) => c[1]?.method === 'PUT')!;
+      const body = JSON.parse(putCall[1].body as string);
+      expect(body.screenshotSource).toBe('folder');
+      expect(localStorage.getItem('shopgenfy_screenshot_source')).toBe('folder');
+    });
+
+    it('falls back to the locally cached screenshot source when the settings fetch fails (DB down)', async () => {
+      localStorage.clear();
+      localStorage.setItem('shopgenfy_screenshot_source', 'repo');
+      mockFetch.mockReset();
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: 'Database unavailable' }),
+      });
+
+      render(<SettingsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Screenshot Source')).toBeInTheDocument();
+      });
+
+      // DB-down should still honor the value the user already saved locally,
+      // not silently reset to the hardcoded 'website' default.
+      await waitFor(() => {
+        expect(screen.getByRole('radio', { name: /repo/i })).toHaveAttribute(
+          'aria-checked',
+          'true'
+        );
       });
     });
   });

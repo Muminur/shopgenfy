@@ -1,9 +1,18 @@
 import { IMAGE_SPECS, FORBIDDEN_PATTERNS } from './validators/constants';
 import type { ImageType, ImageFormat } from './validators/image';
 
-const POLLINATIONS_API_BASE = 'https://image.pollinations.ai/prompt';
+const DEFAULT_POLLINATIONS_API_BASE = 'https://image.pollinations.ai/prompt';
 const DEFAULT_TIMEOUT = 120000;
 const MAX_PROMPT_LENGTH = 2000;
+
+/**
+ * Resolve the Pollinations base URL at call time so `POLLINATIONS_API_BASE`
+ * can be overridden in tests / hermetic E2E (points at a local stub).
+ * Defaults to the production endpoint.
+ */
+function getPollinationsApiBase(): string {
+  return process.env.POLLINATIONS_API_BASE || DEFAULT_POLLINATIONS_API_BASE;
+}
 
 export type { ImageType, ImageFormat };
 export type ImageStyle = 'flat' | 'modern' | 'gradient' | 'minimalist' | '3d';
@@ -23,6 +32,11 @@ export interface GeneratedImageResult {
   width?: number;
   height?: number;
   format?: ImageFormat;
+  /**
+   * Raw downloaded image bytes. The single upstream fetch is reused here so the
+   * route can normalize + store the image without a second network round-trip.
+   */
+  buffer?: Buffer;
   error?: string;
   progress?: number;
 }
@@ -71,7 +85,6 @@ export interface NanoBananaClient {
   ): Promise<GeneratedImageResult[]>;
   getJobStatus(jobId: string): Promise<JobStatus>;
   checkVersion(): Promise<VersionInfo>;
-  regenerateImage(imageId: string): Promise<GeneratedImageResult>;
 }
 
 function getImageDimensions(type: ImageType): { width: number; height: number } {
@@ -140,7 +153,7 @@ export function createNanoBananaClient(_apiKey?: string): NanoBananaClient {
 
     // Build Pollinations.ai URL (FREE API - no authentication needed)
     const encodedPrompt = encodeURIComponent(enhancedPrompt);
-    const pollinationsUrl = `${POLLINATIONS_API_BASE}/${encodedPrompt}?width=${dimensions.width}&height=${dimensions.height}&seed=${seed}&nologo=true&enhance=true`;
+    const pollinationsUrl = `${getPollinationsApiBase()}/${encodedPrompt}?width=${dimensions.width}&height=${dimensions.height}&seed=${seed}&nologo=true&enhance=true`;
 
     // Generate unique job ID for tracking
     const jobId = `pollinations-${request.type}-${Date.now()}-${seed}`;
@@ -168,14 +181,21 @@ export function createNanoBananaClient(_apiKey?: string): NanoBananaClient {
         throw new NanoBananaError('Response is not an image');
       }
 
-      // Return the direct image URL (Pollinations.ai returns the image directly)
+      // Reuse this single fetch: read the bytes so the caller can normalize +
+      // store them without a second round-trip. Pollinations often serves JPEG
+      // even when the URL looks PNG, so report the honest format.
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const format: ImageFormat = /jpe?g/i.test(contentType) ? 'jpeg' : 'png';
+
       return {
         jobId,
         status: 'completed',
         imageUrl: pollinationsUrl,
         width: dimensions.width,
         height: dimensions.height,
-        format: 'png',
+        format,
+        buffer,
       };
     } catch (error) {
       clearTimeout(timeoutId);
@@ -236,48 +256,10 @@ export function createNanoBananaClient(_apiKey?: string): NanoBananaClient {
     };
   }
 
-  /**
-   * Regenerates an existing image with a new seed while preserving the original prompt
-   * @param imageId - The ID of the image to regenerate
-   * @returns Promise resolving to the newly generated image result
-   * @throws {NanoBananaError} If image is not found or generation fails
-   */
-  async function regenerateImage(imageId: string): Promise<GeneratedImageResult> {
-    // Import db operations and connection dynamically to avoid circular dependencies
-    const { getImageById, updateImage } = await import('./db/images');
-    const { getDatabaseConnected } = await import('./mongodb');
-    const db = await getDatabaseConnected();
-
-    // Get original image metadata
-    const originalImage = await getImageById(db, imageId);
-    if (!originalImage) {
-      throw new NanoBananaError('Image not found');
-    }
-
-    // Regenerate with same prompt and dimensions
-    const request: ImageGenerationRequest = {
-      type: originalImage.type,
-      prompt: originalImage.generationPrompt,
-      featureHighlight: originalImage.featureHighlighted,
-    };
-
-    const result = await generateImage(request);
-
-    // Update database with new image data and increment version
-    await updateImage(db, imageId, {
-      driveUrl: result.imageUrl || '',
-      driveFileId: result.jobId,
-      version: originalImage.version + 1,
-    });
-
-    return result;
-  }
-
   return {
     generateImage,
     generateBatch,
     getJobStatus,
     checkVersion,
-    regenerateImage,
   };
 }

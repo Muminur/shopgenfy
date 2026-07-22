@@ -24,6 +24,7 @@ export function ProgressBar({ value, label, showText, className }: ProgressBarPr
 
       <div
         role="progressbar"
+        aria-label={label ?? 'Progress'}
         aria-valuenow={clampedValue}
         aria-valuemin={0}
         aria-valuemax={100}

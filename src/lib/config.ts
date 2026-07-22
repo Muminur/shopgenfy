@@ -16,11 +16,14 @@ export const API_CONFIG = {
   },
 } as const;
 
-// Gemini API configuration
+// Gemini API configuration.
+// Base URL and models are overridable at runtime via the model-resolver /
+// GEMINI_API_BASE; these are documentation defaults reflecting the current
+// working model chain (retired 2.x IDs removed).
 export const GEMINI_CONFIG = {
   baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-  models: ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'],
-  defaultModel: 'gemini-2.0-flash',
+  models: ['gemini-flash-latest', 'gemini-3.5-flash'],
+  defaultModel: 'gemini-flash-latest',
   endpoints: {
     models: '/models',
     generateContent: '/models/{model}:generateContent',
@@ -32,17 +35,16 @@ export const GEMINI_CONFIG = {
   },
 } as const;
 
-// Nano Banana API configuration
-export const NANO_BANANA_CONFIG = {
-  baseUrl: 'https://api.nanobanana.io/v1',
+// Pollinations AI image configuration (free, keyless image generation).
+// Base URL is overridable at runtime via POLLINATIONS_API_BASE (see
+// src/lib/nanobanana.ts); this is the documentation default. Pollinations
+// has no separate generate/status/version endpoints — a single GET against
+// `${baseUrl}/{encodedPrompt}` returns the image synchronously.
+export const POLLINATIONS_CONFIG = {
+  baseUrl: 'https://image.pollinations.ai/prompt',
   supportedDimensions: {
     icon: { width: 1200, height: 1200 },
     feature: { width: 1600, height: 900 },
-  },
-  endpoints: {
-    generate: '/generate',
-    status: '/status',
-    version: '/version',
   },
   supportedFormats: ['png', 'jpeg'] as const,
   maxFileSize: 20 * 1024 * 1024, // 20MB
@@ -142,5 +144,5 @@ export const APP_CONFIG = {
 
 // Type exports for use in other modules
 export type GeminiModel = (typeof GEMINI_CONFIG.models)[number];
-export type ImageFormat = (typeof NANO_BANANA_CONFIG.supportedFormats)[number];
+export type ImageFormat = (typeof POLLINATIONS_CONFIG.supportedFormats)[number];
 export type CollectionName = keyof typeof MONGODB_CONFIG.collections;

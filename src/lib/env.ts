@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
-  NANO_BANANA_API_KEY: z.string().min(1, 'NANO_BANANA_API_KEY is required'),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
   MONGODB_DB_NAME: z.string().min(1, 'MONGODB_DB_NAME is required'),
   GOOGLE_CLIENT_ID: z.string().optional(),

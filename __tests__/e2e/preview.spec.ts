@@ -22,6 +22,14 @@ test.describe('Preview Page - Loading States', () => {
   });
 
   test('should show error for non-existent submission', async ({ page }) => {
+    // Deterministically return 404 for the lookup so the not-found state renders.
+    await page.route('**/api/submissions/*', (route) =>
+      route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Not found' }),
+      })
+    );
     await page.goto('/preview?id=non-existent-id-12345');
 
     // Wait for API call to complete
@@ -29,7 +37,7 @@ test.describe('Preview Page - Loading States', () => {
 
     // Should show "not found" or error message
     const errorMessage = page.getByRole('alert').or(page.getByText(/not found|error/i));
-    await expect(errorMessage).toBeVisible({ timeout: 10000 });
+    await expect(errorMessage.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should display loading state in Suspense boundary', async ({ page }) => {
@@ -75,7 +83,7 @@ test.describe('Preview Page - Content Display', () => {
           images: [
             {
               id: 'img-1',
-              url: 'https://example.com/icon.png',
+              url: '/api/images/img-1',
               type: 'icon',
               width: 1200,
               height: 1200,
@@ -83,7 +91,7 @@ test.describe('Preview Page - Content Display', () => {
             },
             {
               id: 'img-2',
-              url: 'https://example.com/feature1.png',
+              url: '/api/images/img-2',
               type: 'feature',
               width: 1600,
               height: 900,
@@ -170,7 +178,8 @@ test.describe('Preview Page - Features Card', () => {
   });
 
   test('should display Features card header', async ({ page }) => {
-    const featuresTitle = page.getByRole('heading', { name: /features/i });
+    // CardTitle renders as a styled <div>, not a heading.
+    const featuresTitle = page.getByText('Features', { exact: true });
     await expect(featuresTitle).toBeVisible();
   });
 
@@ -181,6 +190,7 @@ test.describe('Preview Page - Features Card', () => {
 
   test('should display all features with checkmarks', async ({ page }) => {
     const features = page.getByRole('listitem');
+    await expect(features.first()).toBeVisible();
     const count = await features.count();
     expect(count).toBeGreaterThanOrEqual(5);
   });
@@ -188,6 +198,7 @@ test.describe('Preview Page - Features Card', () => {
   test('features should have check icons', async ({ page }) => {
     // Look for check icons next to features
     const checkIcons = page.locator('ul li svg');
+    await expect(checkIcons.first()).toBeVisible();
     const count = await checkIcons.count();
     expect(count).toBeGreaterThanOrEqual(5);
   });
@@ -377,7 +388,7 @@ test.describe('Preview Page - Actions', () => {
     await exportButton.click();
 
     // Should show "Exporting..." text
-    const exportingState = page.getByText(/exporting/i);
+    const exportingState = page.getByText(/exporting/i).first();
     await expect(exportingState).toBeVisible({ timeout: 2000 });
   });
 
@@ -518,15 +529,15 @@ test.describe('Preview Page - Error Handling', () => {
     await expect(page).toHaveURL(/dashboard/);
   });
 
-  test('should handle network errors gracefully', async ({ page, context }) => {
-    await context.setOffline(true);
+  test('should handle network errors gracefully', async ({ page }) => {
+    // Abort just the submission fetch (not the whole network) so the page still
+    // loads but the data fetch fails, exercising the error state.
+    await page.route('**/api/submissions/*', (route) => route.abort());
     await page.goto('/preview?id=test-id');
 
     // Should show error state
     const errorMessage = page.getByRole('alert').or(page.getByText(/error|failed/i));
-    await expect(errorMessage).toBeVisible({ timeout: 10000 });
-
-    await context.setOffline(false);
+    await expect(errorMessage.first()).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -556,7 +567,30 @@ test.describe('Preview Page - Responsive Behavior', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           images: [
-            { id: 'img-1', url: '/icon.png', type: 'icon', width: 1200, height: 1200, alt: 'Icon' },
+            {
+              id: 'img-1',
+              url: '/api/images/img-1',
+              type: 'icon',
+              width: 1200,
+              height: 1200,
+              alt: 'Icon',
+            },
+            {
+              id: 'img-2',
+              url: '/api/images/img-2',
+              type: 'feature',
+              width: 1600,
+              height: 900,
+              alt: 'Feature A',
+            },
+            {
+              id: 'img-3',
+              url: '/api/images/img-3',
+              type: 'feature',
+              width: 1600,
+              height: 900,
+              alt: 'Feature B',
+            },
           ],
         }),
       });
@@ -684,7 +718,8 @@ test.describe('Preview Page - Accessibility', () => {
 
     await page.reload();
 
-    const images = page.getByRole('img');
+    // Real <img> elements only (svg icons expose role="img" but use aria, not alt).
+    const images = page.locator('img');
     const count = await images.count();
 
     for (let i = 0; i < count; i++) {

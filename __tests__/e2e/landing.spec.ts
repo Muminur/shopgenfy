@@ -50,7 +50,9 @@ test.describe('Landing Page', () => {
   });
 
   test('should have skip link for accessibility', async ({ page }) => {
-    // Focus on skip link by pressing Tab
+    // The skip link lives in the app shell (MainLayout), used by the workspace
+    // pages; the marketing landing page uses Header/Footer directly.
+    await page.goto('/dashboard');
     await page.keyboard.press('Tab');
     const skipLink = page.getByText(/skip to main content/i);
     await expect(skipLink).toBeVisible();
@@ -87,8 +89,9 @@ test.describe('Landing Page - Testimonials Section', () => {
     const authorName = firstCard.getByText(/sarah johnson|michael chen|emma williams/i);
     await expect(authorName).toBeVisible();
 
-    // Check for role and company info
-    const roleInfo = firstCard.getByText(/developer|manager|at/i);
+    // Check for role and company info (the quote text can also match, so take
+    // the first — the role line).
+    const roleInfo = firstCard.getByText(/developer|manager|at/i).first();
     await expect(roleInfo).toBeVisible();
   });
 
@@ -191,7 +194,7 @@ test.describe('Landing Page - How It Works Section', () => {
   test('should display step titles', async ({ page }) => {
     const enterUrl = page.getByText(/enter your url/i);
     const generateContent = page.getByText(/generate content/i);
-    const exportSubmit = page.getByText(/export.*submit/i);
+    const exportSubmit = page.getByText(/export.*submit/i).first();
 
     await expect(enterUrl).toBeVisible();
     await expect(generateContent).toBeVisible();

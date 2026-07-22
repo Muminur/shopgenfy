@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   API_CONFIG,
   GEMINI_CONFIG,
-  NANO_BANANA_CONFIG,
+  POLLINATIONS_CONFIG,
   GOOGLE_DRIVE_CONFIG,
   MONGODB_CONFIG,
   APP_CONFIG,
@@ -47,32 +47,36 @@ describe('API Configuration', () => {
     });
   });
 
-  describe('NANO_BANANA_CONFIG', () => {
-    it('should have base URL', () => {
-      expect(NANO_BANANA_CONFIG.baseUrl).toBeDefined();
-      expect(NANO_BANANA_CONFIG.baseUrl).toMatch(/^https?:\/\//);
+  describe('POLLINATIONS_CONFIG', () => {
+    it('should have base URL pointing at the real Pollinations host', () => {
+      expect(POLLINATIONS_CONFIG.baseUrl).toBeDefined();
+      expect(POLLINATIONS_CONFIG.baseUrl).toMatch(/^https?:\/\//);
+      expect(POLLINATIONS_CONFIG.baseUrl).toContain('pollinations.ai');
     });
 
     it('should have supported dimensions', () => {
-      expect(NANO_BANANA_CONFIG.supportedDimensions).toBeDefined();
-      expect(NANO_BANANA_CONFIG.supportedDimensions.icon).toBeDefined();
-      expect(NANO_BANANA_CONFIG.supportedDimensions.feature).toBeDefined();
+      expect(POLLINATIONS_CONFIG.supportedDimensions).toBeDefined();
+      expect(POLLINATIONS_CONFIG.supportedDimensions.icon).toBeDefined();
+      expect(POLLINATIONS_CONFIG.supportedDimensions.feature).toBeDefined();
     });
 
     it('should have correct icon dimensions', () => {
-      expect(NANO_BANANA_CONFIG.supportedDimensions.icon.width).toBe(1200);
-      expect(NANO_BANANA_CONFIG.supportedDimensions.icon.height).toBe(1200);
+      expect(POLLINATIONS_CONFIG.supportedDimensions.icon.width).toBe(1200);
+      expect(POLLINATIONS_CONFIG.supportedDimensions.icon.height).toBe(1200);
     });
 
     it('should have correct feature dimensions', () => {
-      expect(NANO_BANANA_CONFIG.supportedDimensions.feature.width).toBe(1600);
-      expect(NANO_BANANA_CONFIG.supportedDimensions.feature.height).toBe(900);
+      expect(POLLINATIONS_CONFIG.supportedDimensions.feature.width).toBe(1600);
+      expect(POLLINATIONS_CONFIG.supportedDimensions.feature.height).toBe(900);
     });
 
-    it('should have endpoint paths', () => {
-      expect(NANO_BANANA_CONFIG.endpoints).toBeDefined();
-      expect(NANO_BANANA_CONFIG.endpoints.generate).toBeDefined();
-      expect(NANO_BANANA_CONFIG.endpoints.status).toBeDefined();
+    it('should have supported formats', () => {
+      expect(POLLINATIONS_CONFIG.supportedFormats).toBeDefined();
+      expect(POLLINATIONS_CONFIG.supportedFormats).toContain('png');
+    });
+
+    it('should have a max file size', () => {
+      expect(POLLINATIONS_CONFIG.maxFileSize).toBeGreaterThan(0);
     });
   });
 

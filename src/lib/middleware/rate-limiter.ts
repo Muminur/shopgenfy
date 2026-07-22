@@ -59,17 +59,28 @@ function cleanupExpiredEntries(): void {
 }
 
 /**
- * Extract IP address from request headers
- * Uses x-forwarded-for header (from proxies/load balancers)
- * Falls back to localhost if no IP found
+ * Extract the rate-limit client IP from request headers.
+ *
+ * `x-forwarded-for` is a proxy chain "client, proxy1, proxy2": each trusted
+ * proxy APPENDS the address it observed. The LEFTMOST entry is fully
+ * client-controlled and trivially spoofable — keying on it lets an attacker
+ * mint a fresh bucket per request by rotating a fake leftmost IP. The RIGHTMOST
+ * entry is the address our own trusted edge proxy (e.g. Vercel) saw, so it is
+ * the least forgeable signal available here and is used as the key.
+ *
+ * (Next 16's `NextRequest` no longer exposes `request.ip`, and no platform
+ * client-ip helper is in this project's dependency set, so rightmost-XFF is the
+ * pragmatic hardening. Configurable trusted-proxy hop counts are out of scope.)
+ *
+ * Falls back to localhost if no usable IP is found.
  */
 function getIpAddress(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
 
   if (forwarded) {
-    // x-forwarded-for can contain multiple IPs (proxy chain)
-    // Use the first IP (client IP)
-    const ip = forwarded.split(',')[0].trim();
+    const parts = forwarded.split(',');
+    // Rightmost hop = the address added by the trusted proxy closest to us.
+    const ip = parts[parts.length - 1].trim();
 
     // Validate IP format (basic check)
     if (ip && /^[\d.:a-f]+$/i.test(ip)) {
@@ -202,15 +213,26 @@ export const rateLimitConfigs = {
       requests: 5,
       windowMs: 60000, // 1 minute (expensive operation)
     } as RateLimitConfig,
-    status: {
-      requests: 60,
-      windowMs: 60000, // 1 minute (lightweight polling)
-    } as RateLimitConfig,
     batch: {
       requests: 2,
       windowMs: 60000, // 1 minute (very expensive)
     } as RateLimitConfig,
   },
+  screenshots: {
+    upload: {
+      // Looser than the AI-generation caps: the folder-upload dropzone sends up
+      // to 20 files sequentially, one request each, so a full folder must fit in
+      // a single window. Sharp work is CPU/memory-bound, hence still capped.
+      requests: 20,
+      windowMs: 60000, // 1 minute
+    } as RateLimitConfig,
+  },
+  export: {
+    // Each call builds a ZIP in memory; stricter than uploads but generous
+    // enough for repeated export attempts.
+    requests: 10,
+    windowMs: 60000, // 1 minute
+  } as RateLimitConfig,
 };
 
 /**

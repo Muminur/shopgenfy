@@ -1,13 +1,27 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { POST } from '@/app/api/submissions/route';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ObjectId } from 'mongodb';
+
+// Mock MongoDB connection
+vi.mock('@/lib/mongodb', () => ({
+  getDatabase: vi.fn(),
+  getDatabaseConnected: vi.fn(),
+}));
+
+// Mock submissions database operations
+vi.mock('@/lib/db/submissions', () => ({
+  createSubmission: vi.fn(),
+}));
 
 describe('Bug Fix: Save Draft with Empty Optional Fields', () => {
   const baseUrl = 'http://localhost:3000';
 
-  beforeAll(() => {
-    // Set mock MongoDB to avoid actual database calls
-    process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should accept draft submission with empty primaryCategory', async () => {
@@ -26,6 +40,29 @@ describe('Bug Fix: Save Draft with Empty Optional Fields', () => {
       status: 'draft',
     };
 
+    const mockCreated = {
+      _id: new ObjectId(),
+      userId: 'test-user-123',
+      appName: 'Test App',
+      appIntroduction: 'A test application',
+      appDescription: 'Testing draft save',
+      featureList: ['Feature 1'],
+      languages: [],
+      worksWith: [],
+      featureTags: [],
+      pricing: { type: 'free' },
+      status: 'draft',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const { createSubmission } = await import('@/lib/db/submissions');
+    (createSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(mockCreated);
+
+    const { getDatabaseConnected } = await import('@/lib/mongodb');
+    (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    const { POST } = await import('@/app/api/submissions/route');
     const request = new NextRequest(`${baseUrl}/api/submissions`, {
       method: 'POST',
       headers: {
@@ -57,6 +94,29 @@ describe('Bug Fix: Save Draft with Empty Optional Fields', () => {
       status: 'draft',
     };
 
+    const mockCreated = {
+      _id: new ObjectId(),
+      userId: 'test-user-456',
+      appName: 'Minimal App',
+      appIntroduction: '',
+      appDescription: '',
+      featureList: [],
+      languages: [],
+      worksWith: [],
+      featureTags: [],
+      pricing: { type: 'free' },
+      status: 'draft',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const { createSubmission } = await import('@/lib/db/submissions');
+    (createSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(mockCreated);
+
+    const { getDatabaseConnected } = await import('@/lib/mongodb');
+    (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    const { POST } = await import('@/app/api/submissions/route');
     const request = new NextRequest(`${baseUrl}/api/submissions`, {
       method: 'POST',
       headers: {
@@ -88,6 +148,29 @@ describe('Bug Fix: Save Draft with Empty Optional Fields', () => {
       status: 'draft',
     };
 
+    const mockCreated = {
+      _id: new ObjectId(),
+      userId: 'test-user-789',
+      appName: 'Feature Test App',
+      appIntroduction: 'Testing field transformation',
+      appDescription: '',
+      featureList: ['Dashboard Feature 1', 'Dashboard Feature 2'],
+      languages: [],
+      worksWith: [],
+      featureTags: [],
+      pricing: { type: 'free' },
+      status: 'draft',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const { createSubmission } = await import('@/lib/db/submissions');
+    (createSubmission as ReturnType<typeof vi.fn>).mockResolvedValue(mockCreated);
+
+    const { getDatabaseConnected } = await import('@/lib/mongodb');
+    (getDatabaseConnected as ReturnType<typeof vi.fn>).mockResolvedValue({});
+
+    const { POST } = await import('@/app/api/submissions/route');
     const request = new NextRequest(`${baseUrl}/api/submissions`, {
       method: 'POST',
       headers: {
@@ -101,5 +184,12 @@ describe('Bug Fix: Save Draft with Empty Optional Fields', () => {
 
     // Should handle features -> featureList transformation
     expect(response.status).not.toBe(400);
+    expect(createSubmission).toHaveBeenCalledWith(
+      expect.anything(),
+      'test-user-789',
+      expect.objectContaining({
+        featureList: ['Dashboard Feature 1', 'Dashboard Feature 2'],
+      })
+    );
   });
 });

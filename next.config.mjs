@@ -84,7 +84,12 @@ const nextConfig = {
         ],
       },
       {
-        source: '/api/:path*',
+        // Excludes /api/images/<id> (the byte-serving route) so its own
+        // `Cache-Control: private, max-age=86400` (spec Task 5) is not
+        // overwritten by this blanket no-store rule. /api/images itself
+        // (the metadata list route) sets no Cache-Control of its own and
+        // stays under this no-store rule as before.
+        source: '/api/((?!images/).*)',
         headers: [
           {
             key: 'Cache-Control',

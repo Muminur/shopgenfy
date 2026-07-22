@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGeminiClient, GeminiError } from '@/lib/gemini';
+import { fetchGitHubRepo, isGitHubRepoUrl } from '@/lib/github-fetcher';
 import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
 
 const rateLimiter = createRateLimiter(rateLimitConfigs.gemini.analyze);
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { url?: string };
+  let body: { url?: string; model?: string; sourceType?: 'url' | 'github' | 'source' };
   try {
     body = await request.json();
   } catch {
@@ -48,9 +49,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Only HTTP and HTTPS URLs are allowed' }, { status: 400 });
   }
 
+  // Route GitHub repository links through the repo fetcher + shared analysis
+  // pipeline. Detected explicitly (sourceType) or by URL shape.
+  const useGitHub = body.sourceType === 'github' || isGitHubRepoUrl(body.url);
+
   try {
     const client = createGeminiClient(apiKey);
-    const analysis = await client.analyzeUrl(body.url);
+    const analysis = useGitHub
+      ? await client.analyzeContent(await fetchGitHubRepo(body.url, process.env.GITHUB_TOKEN), {
+          model: body.model,
+        })
+      : await client.analyzeUrl(body.url, { model: body.model });
 
     return NextResponse.json(analysis);
   } catch (error) {
@@ -67,8 +76,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode || 500 });
     }
 
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[/api/gemini/analyze] Non-GeminiError:', errorMessage);
-    return NextResponse.json({ error: `Failed to analyze URL: ${errorMessage}` }, { status: 500 });
+    // Log the underlying detail server-side only; never reflect it to the client
+    // (fetch/DNS error strings can leak internal hostnames/IPs and aid SSRF probing).
+    const errorDetail = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[/api/gemini/analyze] Non-GeminiError:', errorDetail);
+    return NextResponse.json(
+      { error: 'Failed to analyze URL. Please try again later.' },
+      { status: 500 }
+    );
   }
 }

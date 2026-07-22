@@ -45,6 +45,7 @@ describe('NanoBananaClient (Pollinations.ai)', () => {
         headers: {
           get: (name: string) => (name === 'content-type' ? 'image/png' : null),
         } as any,
+        arrayBuffer: async () => new ArrayBuffer(8),
       });
 
       const request: ImageGenerationRequest = {
@@ -60,6 +61,7 @@ describe('NanoBananaClient (Pollinations.ai)', () => {
       expect(result.imageUrl).toContain('image.pollinations.ai');
       expect(result.status).toBe('completed');
       expect(result.format).toBe('png');
+      expect(Buffer.isBuffer(result.buffer)).toBe(true);
     });
 
     it('should generate a feature image with correct dimensions', async () => {
@@ -68,6 +70,7 @@ describe('NanoBananaClient (Pollinations.ai)', () => {
         headers: {
           get: (name: string) => (name === 'content-type' ? 'image/png' : null),
         } as any,
+        arrayBuffer: async () => new ArrayBuffer(8),
       });
 
       const request: ImageGenerationRequest = {
@@ -137,6 +140,7 @@ describe('NanoBananaClient (Pollinations.ai)', () => {
         headers: {
           get: (name: string) => (name === 'content-type' ? 'image/png' : null),
         } as any,
+        arrayBuffer: async () => new ArrayBuffer(8),
       });
 
       const request: ImageGenerationRequest = {
@@ -160,6 +164,7 @@ describe('NanoBananaClient (Pollinations.ai)', () => {
         headers: {
           get: (name: string) => (name === 'content-type' ? 'image/png' : null),
         } as any,
+        arrayBuffer: async () => new ArrayBuffer(8),
       });
 
       const request: ImageGenerationRequest = {
@@ -226,6 +231,7 @@ describe('NanoBananaClient (Pollinations.ai)', () => {
         headers: {
           get: (name: string) => (name === 'content-type' ? 'image/png' : null),
         } as any,
+        arrayBuffer: async () => new ArrayBuffer(8),
       });
 
       const requests: ImageGenerationRequest[] = [
@@ -247,6 +253,7 @@ describe('NanoBananaClient (Pollinations.ai)', () => {
         headers: {
           get: (name: string) => (name === 'content-type' ? 'image/png' : null),
         } as any,
+        arrayBuffer: async () => new ArrayBuffer(8),
       });
 
       const requests: ImageGenerationRequest[] = Array.from({ length: 10 }, (_, i) => ({
@@ -339,6 +346,7 @@ describe('NanoBananaClient (Pollinations.ai)', () => {
         headers: {
           get: (name: string) => (name === 'content-type' ? 'image/png' : null),
         } as any,
+        arrayBuffer: async () => new ArrayBuffer(8),
       });
 
       const request: ImageGenerationRequest = {

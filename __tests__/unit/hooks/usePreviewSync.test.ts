@@ -1,6 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { usePreviewSync } from '@/hooks/usePreviewSync';
+import type { PreviewFormData as HookPreviewFormData, ImageRef } from '@/hooks/usePreviewSync';
 import type { PricingConfig } from '@/types';
 
 // Define the preview data type for tests
@@ -497,6 +498,62 @@ describe('usePreviewSync Hook', () => {
         writable: true,
         configurable: true,
       });
+    });
+  });
+
+  describe('imageRefs', () => {
+    it('carries imageRefs (ids/urls/alt/type only) through save and load', () => {
+      const { result } = renderHook(() => usePreviewSync());
+
+      const imageRefs: ImageRef[] = [
+        { id: 'img-1', url: '/api/images/img-1', type: 'icon', altText: 'App icon' },
+        { id: 'img-2', url: '/api/images/img-2', type: 'feature', altText: 'Feature one' },
+      ];
+      const withRefs: HookPreviewFormData = { ...initialFormData, imageRefs };
+
+      act(() => {
+        result.current.saveToPreview(withRefs);
+      });
+
+      const raw = mockLocalStorage.setItem.mock.calls.at(-1)![1] as string;
+      const saved = JSON.parse(raw);
+      expect(saved.data.imageRefs).toHaveLength(2);
+      expect(saved.data.imageRefs[0]).toMatchObject({
+        id: 'img-1',
+        url: '/api/images/img-1',
+        type: 'icon',
+        altText: 'App icon',
+      });
+
+      // The reference payload must never smuggle raw image bytes.
+      expect(raw).not.toMatch(/base64|data:image/i);
+
+      mockLocalStorage.getItem.mockReturnValueOnce(raw);
+      let loaded: HookPreviewFormData | null = null;
+      act(() => {
+        loaded = result.current.loadFromPreview();
+      });
+      expect(loaded!.imageRefs).toHaveLength(2);
+      expect(loaded!.imageRefs![1].url).toBe('/api/images/img-2');
+    });
+
+    it('keeps the serialized payload well under 100KB for 10 image refs', () => {
+      const { result } = renderHook(() => usePreviewSync());
+
+      const imageRefs: ImageRef[] = Array.from({ length: 10 }, (_, i) => ({
+        id: `image-${i}`,
+        url: `/api/images/image-${i}`,
+        type: i === 0 ? 'icon' : 'feature',
+        altText: `Feature highlight number ${i}`,
+      }));
+      const withRefs: HookPreviewFormData = { ...initialFormData, imageRefs };
+
+      act(() => {
+        result.current.saveToPreview(withRefs);
+      });
+
+      const raw = mockLocalStorage.setItem.mock.calls.at(-1)![1] as string;
+      expect(Buffer.byteLength(raw, 'utf8')).toBeLessThan(100 * 1024);
     });
   });
 });

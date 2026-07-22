@@ -2,6 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PricingConfig } from '@/types';
 
 /**
+ * Lightweight reference to a stored image. Carries ONLY the id/url/type/alt so
+ * the preview payload stays tiny — never image bytes or base64 (localStorage
+ * quota + the store is the single source of truth for the actual PNG bytes).
+ */
+export interface ImageRef {
+  id: string;
+  url: string;
+  type: string;
+  altText: string;
+}
+
+/**
  * Preview form data structure for localStorage sync
  */
 export interface PreviewFormData {
@@ -15,6 +27,11 @@ export interface PreviewFormData {
   primaryCategory: string;
   secondaryCategory: string;
   pricing: PricingConfig;
+  /**
+   * References to generated/uploaded images (ids + same-origin URLs only).
+   * Optional so older saved payloads without it still deserialize cleanly.
+   */
+  imageRefs?: ImageRef[];
 }
 
 interface StoredPreviewData {

@@ -3,15 +3,56 @@ import * as fs from 'fs';
 import * as path from 'path';
 import AdmZip from 'adm-zip';
 
+// Browser-mock image generation so these exploratory tests don't share the
+// process-wide 5/min Pollinations rate limit (the real generate -> store ->
+// export path is proven in hermetic-flows.spec.ts). Same-origin URLs keep
+// next/image happy.
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/nanobanana/generate', async (route) => {
+    const body = route.request().postDataJSON();
+    const type = body?.type === 'feature' ? 'feature' : 'icon';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        image: {
+          id: `e2e-${type}-${Math.random().toString(36).slice(2)}`,
+          url: '/api/images/e2e-mock',
+          type,
+          width: type === 'icon' ? 1200 : 1600,
+          height: type === 'icon' ? 1200 : 900,
+          altText: `${type} image`,
+          provider: 'pollinations',
+        },
+        jobId: 'job-e2e',
+        status: 'completed',
+        warnings: [],
+      }),
+    });
+  });
+});
+
+async function fillCompleteSubmission(page: import('@playwright/test').Page): Promise<void> {
+  await page.goto('/dashboard');
+  await page.getByLabel('App Name').fill('Export Test App');
+  await page.getByLabel('App Introduction (Tagline)').fill('A concise tagline');
+  await page.getByLabel('App Description').fill('A description long enough to satisfy the form.');
+  const feature = page.getByPlaceholder(/feature/i).first();
+  if (await feature.isVisible().catch(() => false)) {
+    await feature.fill('Primary feature');
+  }
+  // Generate (mocked) images so the export progress gate (>=80%) is satisfied.
+  await page.getByRole('button', { name: 'Generate Images' }).first().click();
+  await expect(page.getByRole('button', { name: /export package/i })).toBeEnabled({
+    timeout: 10_000,
+  });
+}
+
 test.describe('Export Flow E2E', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/dashboard');
-
-    // Create a basic submission for export
-    const appNameInput = page.getByLabel(/app name/i);
-    if (await appNameInput.isVisible()) {
-      await appNameInput.fill('Export Test App');
-    }
+    // Establish a complete submission so the export button is enabled and the
+    // download tests actually exercise the stateless export route.
+    await fillCompleteSubmission(page);
   });
 
   test('generate and download ZIP export', async ({ page }) => {
@@ -20,7 +61,7 @@ test.describe('Export Flow E2E', () => {
       name: /export|download.*package|download.*all/i,
     });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       // Set up download listener
       const downloadPromise = page.waitForEvent('download');
 
@@ -39,7 +80,10 @@ test.describe('Export Flow E2E', () => {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      const downloadPath = path.join(tempDir, download.suggestedFilename());
+      const downloadPath = path.join(
+        tempDir,
+        `${Date.now()}-${Math.random().toString(36).slice(2)}-${download.suggestedFilename()}`
+      );
       await download.saveAs(downloadPath);
 
       // Verify file exists
@@ -55,7 +99,7 @@ test.describe('Export Flow E2E', () => {
   test('verify ZIP contains required files', async ({ page }) => {
     const exportButton = page.getByRole('button', { name: /export|download.*package/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       const downloadPromise = page.waitForEvent('download');
       await exportButton.click();
 
@@ -67,7 +111,10 @@ test.describe('Export Flow E2E', () => {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      const downloadPath = path.join(tempDir, download.suggestedFilename());
+      const downloadPath = path.join(
+        tempDir,
+        `${Date.now()}-${Math.random().toString(36).slice(2)}-${download.suggestedFilename()}`
+      );
       await download.saveAs(downloadPath);
 
       // Read ZIP contents
@@ -91,7 +138,7 @@ test.describe('Export Flow E2E', () => {
   test('verify metadata.json contains submission data', async ({ page }) => {
     const exportButton = page.getByRole('button', { name: /export|download.*package/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       const downloadPromise = page.waitForEvent('download');
       await exportButton.click();
 
@@ -102,7 +149,10 @@ test.describe('Export Flow E2E', () => {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      const downloadPath = path.join(tempDir, download.suggestedFilename());
+      const downloadPath = path.join(
+        tempDir,
+        `${Date.now()}-${Math.random().toString(36).slice(2)}-${download.suggestedFilename()}`
+      );
       await download.saveAs(downloadPath);
 
       // Extract and read metadata
@@ -115,8 +165,8 @@ test.describe('Export Flow E2E', () => {
         const metadataContent = metadataEntry.getData().toString('utf8');
         const metadata = JSON.parse(metadataContent);
 
-        // Verify it contains app name
-        expect(metadata.appName || metadata.app_name).toBeTruthy();
+        // The stateless export nests the form under `submission`.
+        expect(metadata.submission?.appName || metadata.appName || metadata.app_name).toBeTruthy();
       }
 
       // Clean up
@@ -144,7 +194,7 @@ test.describe('Export Flow E2E', () => {
     // Now export
     const exportButton = page.getByRole('button', { name: /export|download.*package/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       const downloadPromise = page.waitForEvent('download');
       await exportButton.click();
 
@@ -155,7 +205,10 @@ test.describe('Export Flow E2E', () => {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      const downloadPath = path.join(tempDir, download.suggestedFilename());
+      const downloadPath = path.join(
+        tempDir,
+        `${Date.now()}-${Math.random().toString(36).slice(2)}-${download.suggestedFilename()}`
+      );
       await download.saveAs(downloadPath);
 
       // Check for image files
@@ -226,7 +279,7 @@ test.describe('Export Flow E2E', () => {
   test('show export progress indicator', async ({ page }) => {
     const exportButton = page.getByRole('button', { name: /export|download.*package/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       await exportButton.click();
 
       // Should show processing state
@@ -244,7 +297,7 @@ test.describe('Export Flow E2E', () => {
 
     const exportButton = page.getByRole('button', { name: /export|download/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       // Button might be disabled
       const isDisabled = await exportButton.isDisabled();
 
@@ -272,7 +325,7 @@ test.describe('Export Flow - Error Handling', () => {
 
     const exportButton = page.getByRole('button', { name: /export|download/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       // Simulate network error
       await exportButton.click();
 
@@ -289,9 +342,10 @@ test.describe('Export Flow - Error Handling', () => {
   });
 
   test('retry failed export', async ({ page }) => {
+    await page.goto('/dashboard');
     const exportButton = page.getByRole('button', { name: /export|download/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       // After a failure, retry button should appear
       const retryButton = page.getByRole('button', { name: /retry.*export|try again/i });
 
@@ -337,7 +391,7 @@ test.describe('Export Flow - Download Management', () => {
 
     const exportButton = page.getByRole('button', { name: /export|download.*package/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       const downloadPromise = page.waitForEvent('download');
       await exportButton.click();
 
@@ -356,9 +410,10 @@ test.describe('Export Flow - Download Management', () => {
   });
 
   test('handle interrupted download', async ({ page }) => {
+    await page.goto('/dashboard');
     const exportButton = page.getByRole('button', { name: /export|download/i });
 
-    if (await exportButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await exportButton.isEnabled().catch(() => false)) {
       const downloadPromise = page.waitForEvent('download');
       await exportButton.click();
 

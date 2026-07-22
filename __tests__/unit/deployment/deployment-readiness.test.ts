@@ -212,6 +212,39 @@ describe('Deployment Readiness Verification', () => {
       expect(content).toContain('X-Frame-Options');
       expect(content).toContain('X-XSS-Protection');
     });
+
+    it('should exclude /api/images/<id> from the blanket API no-store rule so stored images stay cacheable', async () => {
+      // The /api/images/[id] route sets its own
+      // `Cache-Control: private, max-age=86400` (spec Task 5). If the
+      // blanket /api/:path* no-store rule here also matches that route, the
+      // later-defined rule wins (Next.js "last matching header overrides")
+      // and stored images are served uncached.
+      const nextConfig = (await import('../../../next.config.mjs')).default;
+      if (!nextConfig.headers) {
+        throw new Error('next.config.mjs must export a headers() function');
+      }
+      const headerRules = await nextConfig.headers();
+      const apiRule = headerRules.find((h: { source: string }) => h.source.includes('/api'));
+      expect(apiRule).toBeDefined();
+      if (!apiRule) {
+        throw new Error('unreachable');
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { pathToRegexp } = require('next/dist/compiled/path-to-regexp');
+      const matcher = pathToRegexp(apiRule.source);
+
+      expect(matcher.test('/api/images/some-id')).toBe(false);
+
+      // /api/images itself (the metadata list route) sets no Cache-Control
+      // of its own, so it must stay under the blanket no-store rule.
+      expect(matcher.test('/api/images')).toBe(true);
+
+      // Every other API route must still get the no-store treatment.
+      expect(matcher.test('/api/gemini/analyze')).toBe(true);
+      expect(matcher.test('/api/imagen/generate')).toBe(true);
+      expect(matcher.test('/api/settings')).toBe(true);
+    });
   });
 
   describe('Package.json Scripts', () => {

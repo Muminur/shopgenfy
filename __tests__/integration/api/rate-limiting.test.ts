@@ -101,7 +101,6 @@ vi.mock('@/lib/nanobanana', () => ({
 import { GET as getModels } from '@/app/api/gemini/models/route';
 import { POST as analyzeUrl } from '@/app/api/gemini/analyze/route';
 import { POST as generateImage } from '@/app/api/nanobanana/generate/route';
-import { GET as getStatus } from '@/app/api/nanobanana/status/[jobId]/route';
 import { POST as batchGenerate } from '@/app/api/nanobanana/batch/route';
 
 describe('API Route Rate Limiting Integration', () => {
@@ -110,7 +109,6 @@ describe('API Route Rate Limiting Integration', () => {
     clearRateLimitStore(); // Clear rate limit state between tests
     // Mock environment variables
     process.env.GEMINI_API_KEY = 'test-gemini-key';
-    process.env.NANO_BANANA_API_KEY = 'test-nano-banana-key';
   });
 
   afterEach(() => {
@@ -298,48 +296,6 @@ describe('API Route Rate Limiting Integration', () => {
         });
 
         const response = await generateImage(request);
-        expect(response.status).toBe(429);
-      });
-    });
-
-    describe('GET /api/nanobanana/status/[jobId]', () => {
-      it('should allow requests within limit (60 req/min)', async () => {
-        const ip = '192.168.1.400';
-
-        for (let i = 0; i < 60; i++) {
-          const request = new NextRequest('http://localhost:3000/api/nanobanana/status/job-123', {
-            method: 'GET',
-            headers: { 'x-forwarded-for': ip },
-          });
-
-          const response = await getStatus(request, {
-            params: Promise.resolve({ jobId: 'job-123' }),
-          });
-          expect(response.status).not.toBe(429);
-        }
-      });
-
-      it('should block 61st request', async () => {
-        const ip = '192.168.1.401';
-
-        // Make 60 requests
-        for (let i = 0; i < 60; i++) {
-          const request = new NextRequest('http://localhost:3000/api/nanobanana/status/job-123', {
-            method: 'GET',
-            headers: { 'x-forwarded-for': ip },
-          });
-          await getStatus(request, { params: Promise.resolve({ jobId: 'job-123' }) });
-        }
-
-        // 61st blocked
-        const request = new NextRequest('http://localhost:3000/api/nanobanana/status/job-123', {
-          method: 'GET',
-          headers: { 'x-forwarded-for': ip },
-        });
-
-        const response = await getStatus(request, {
-          params: Promise.resolve({ jobId: 'job-123' }),
-        });
         expect(response.status).toBe(429);
       });
     });

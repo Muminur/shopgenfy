@@ -15,7 +15,6 @@ describe('Production Environment Validation', () => {
     it('should validate required production environment variables', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -29,7 +28,6 @@ describe('Production Environment Validation', () => {
     it('should return errors for missing required variables in production', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', ''); // Explicitly set to empty
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -43,7 +41,6 @@ describe('Production Environment Validation', () => {
     it('should validate MONGODB_URI format', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'invalid-uri'); // Invalid format (not mongodb://)
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -57,7 +54,6 @@ describe('Production Environment Validation', () => {
     it('should warn about optional Google Drive variables', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
       // GOOGLE_CLIENT_ID not set
@@ -72,7 +68,6 @@ describe('Production Environment Validation', () => {
     it('should accept valid mongodb+srv URI format', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb+srv://user:pass@cluster.mongodb.net');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -82,24 +77,22 @@ describe('Production Environment Validation', () => {
       expect(result.isValid).toBe(true);
     });
 
-    it('should return error for missing NANO_BANANA_API_KEY', async () => {
+    it('should not require NANO_BANANA_API_KEY (Pollinations needs no key)', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', ''); // Explicitly set to empty
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
       const { validateProductionEnv } = await import('@/lib/production-env');
       const result = validateProductionEnv();
 
-      expect(result.isValid).toBe(false);
-      expect(result.errors.some((e) => e.includes('NANO_BANANA_API_KEY'))).toBe(true);
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
 
     it('should return error for missing MONGODB_DB_NAME', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', ''); // Explicitly set to empty
 
@@ -115,7 +108,6 @@ describe('Production Environment Validation', () => {
     it('should check rate limiting is enabled in production', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -128,7 +120,6 @@ describe('Production Environment Validation', () => {
     it('should verify environment is production', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -141,7 +132,6 @@ describe('Production Environment Validation', () => {
     it('should return not ready when in development environment', async () => {
       vi.stubEnv('NODE_ENV', 'development');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -154,7 +144,6 @@ describe('Production Environment Validation', () => {
     it('should check error tracking configuration', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -167,7 +156,6 @@ describe('Production Environment Validation', () => {
     it('should check API keys configuration', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -180,7 +168,6 @@ describe('Production Environment Validation', () => {
     it('should check database configuration', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -193,7 +180,6 @@ describe('Production Environment Validation', () => {
     it('should report not ready when API keys missing', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', ''); // Explicitly set to empty
-      vi.stubEnv('NANO_BANANA_API_KEY', ''); // Explicitly set to empty
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -207,7 +193,6 @@ describe('Production Environment Validation', () => {
     it('should report not ready when database config missing', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', ''); // Explicitly set to empty
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -221,7 +206,6 @@ describe('Production Environment Validation', () => {
     it('should return issues array with specific problems', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', ''); // Explicitly set to empty
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 
@@ -236,7 +220,6 @@ describe('Production Environment Validation', () => {
     it('should return proper structure with all checks', async () => {
       vi.stubEnv('NODE_ENV', 'production');
       vi.stubEnv('GEMINI_API_KEY', 'test-gemini-key');
-      vi.stubEnv('NANO_BANANA_API_KEY', 'test-nanobanana-key');
       vi.stubEnv('MONGODB_URI', 'mongodb://localhost:27017');
       vi.stubEnv('MONGODB_DB_NAME', 'test-db');
 

@@ -2,7 +2,6 @@ import { z } from 'zod';
 
 const productionEnvSchema = z.object({
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
-  NANO_BANANA_API_KEY: z.string().min(1, 'NANO_BANANA_API_KEY is required'),
   MONGODB_URI: z.string().regex(/^mongodb(\+srv)?:\/\//, 'Invalid MongoDB URI format'),
   MONGODB_DB_NAME: z.string().min(1, 'MONGODB_DB_NAME is required'),
   GOOGLE_CLIENT_ID: z.string().optional(),
@@ -74,7 +73,7 @@ export function checkProductionReadiness(): ProductionReadiness {
     rateLimiting: true, // Rate limiting is enabled via src/lib/middleware/rate-limiter.ts
     errorTracking: !!process.env.SENTRY_DSN, // Optional: true if Sentry DSN is configured
     database: !!process.env.MONGODB_URI,
-    apiKeys: !!process.env.GEMINI_API_KEY && !!process.env.NANO_BANANA_API_KEY,
+    apiKeys: !!process.env.GEMINI_API_KEY,
   };
 
   const issues: string[] = [];

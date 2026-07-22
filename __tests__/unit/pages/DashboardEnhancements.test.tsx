@@ -6,9 +6,11 @@ import DashboardPage from '@/app/dashboard/page';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 global.fetch = vi.fn() as any;
 
-// Mock localStorage for user ID persistence
+// Mock localStorage for user ID persistence. Key-aware: the anonymous user id
+// is present, but there is no persisted submission id (fresh session) so the
+// first auto-save POSTs rather than PUTs an existing draft.
 const localStorageMock = {
-  getItem: vi.fn(() => 'test-user-id'),
+  getItem: vi.fn((key: string) => (key === 'shopgenfy_user_id' ? 'test-user-id' : null)),
   setItem: vi.fn(),
   removeItem: vi.fn(),
   clear: vi.fn(),
@@ -18,7 +20,9 @@ Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 describe('Dashboard Page - Milestone 6 Enhancements', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorageMock.getItem.mockReturnValue('test-user-id');
+    localStorageMock.getItem.mockImplementation((key: string) =>
+      key === 'shopgenfy_user_id' ? 'test-user-id' : null
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (global.fetch as any).mockResolvedValue({
       ok: true,
@@ -117,7 +121,13 @@ describe('Dashboard Page - Milestone 6 Enhancements', () => {
 
         vi.advanceTimersByTime(5000);
 
-        expect(global.fetch).not.toHaveBeenCalled();
+        // The mount effect may read GET /api/settings, but no auto-save
+        // (POST/PUT to /api/submissions) must fire without user interaction.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const submissionCalls = (global.fetch as any).mock.calls.filter((call: any) =>
+          String(call[0]).includes('/api/submissions')
+        );
+        expect(submissionCalls.length).toBe(0);
       } finally {
         vi.useRealTimers();
       }

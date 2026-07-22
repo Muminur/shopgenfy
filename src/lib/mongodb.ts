@@ -15,13 +15,19 @@ function getMongoConfig() {
   return { MONGODB_URI, MONGODB_DB_NAME };
 }
 
-const options = {
-  maxPoolSize: 10,
-  minPoolSize: 2,
-  maxIdleTimeMS: 30000,
-  connectTimeoutMS: 10000,
-  socketTimeoutMS: 45000,
-};
+// Connection options. `serverSelectionTimeoutMS` defaults to 5s so a dead DB
+// fails fast instead of hanging 30s; it is env-overridable purely as a test
+// seam (so the resilience test can reject in ~300ms).
+function getMongoOptions() {
+  return {
+    maxPoolSize: 10,
+    minPoolSize: 2,
+    maxIdleTimeMS: 30000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 5000,
+  };
+}
 
 let client: MongoClient | null = null;
 let clientPromise: Promise<MongoClient> | null = null;
@@ -37,13 +43,13 @@ export function getMongoClient(): MongoClient {
 
   if (process.env.NODE_ENV === 'development') {
     if (!global._mongoClient) {
-      global._mongoClient = new MongoClient(MONGODB_URI, options);
+      global._mongoClient = new MongoClient(MONGODB_URI, getMongoOptions());
     }
     return global._mongoClient;
   }
 
   if (!client) {
-    client = new MongoClient(MONGODB_URI, options);
+    client = new MongoClient(MONGODB_URI, getMongoOptions());
   }
   return client;
 }
@@ -51,15 +57,27 @@ export function getMongoClient(): MongoClient {
 export async function connectToDatabase(): Promise<MongoClient> {
   if (process.env.NODE_ENV === 'development') {
     if (!global._mongoClientPromise) {
-      const client = getMongoClient();
-      global._mongoClientPromise = client.connect();
+      const devClient = getMongoClient();
+      // On failure, drop the poisoned promise AND the client so the next
+      // request retries with a fresh client (recovers when the DB comes back).
+      global._mongoClientPromise = devClient.connect().catch((err) => {
+        void devClient.close().catch(() => {});
+        global._mongoClientPromise = undefined;
+        global._mongoClient = undefined;
+        throw err;
+      });
     }
     return global._mongoClientPromise;
   }
 
   if (!clientPromise) {
     const mongoClient = getMongoClient();
-    clientPromise = mongoClient.connect();
+    clientPromise = mongoClient.connect().catch((err) => {
+      void mongoClient.close().catch(() => {});
+      clientPromise = null;
+      client = null;
+      throw err;
+    });
   }
   return clientPromise;
 }

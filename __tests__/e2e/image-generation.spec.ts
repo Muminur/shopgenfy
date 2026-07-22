@@ -1,5 +1,60 @@
 import { test, expect } from '@playwright/test';
 
+// Mock the generation endpoints at the browser level for these exploratory UI
+// tests. The REAL generate -> normalize -> store -> gallery/export path is
+// proven once in hermetic-flows.spec.ts; mocking here keeps these tests fast and
+// avoids the process-wide 5/min Pollinations rate limit tripping under a full
+// suite run. Responses use same-origin `/api/images/*` URLs so next/image never
+// throws on an unconfigured remote host.
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/nanobanana/generate', async (route) => {
+    const body = route.request().postDataJSON();
+    const type = body?.type === 'feature' ? 'feature' : 'icon';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        image: {
+          id: `e2e-${type}-${Math.random().toString(36).slice(2)}`,
+          url: '/api/images/e2e-mock',
+          type,
+          width: type === 'icon' ? 1200 : 1600,
+          height: type === 'icon' ? 1200 : 900,
+          altText: `${type === 'icon' ? 'App icon' : 'Feature'} image`,
+          provider: 'pollinations',
+        },
+        jobId: 'job-e2e',
+        status: 'completed',
+        warnings: [],
+      }),
+    });
+  });
+
+  await page.route('**/api/imagen/generate', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        count: 1,
+        usedScreenshots: 0,
+        warnings: [],
+        images: [
+          {
+            id: `e2e-imagen-${Math.random().toString(36).slice(2)}`,
+            url: '/api/images/e2e-mock',
+            type: 'icon',
+            width: 1200,
+            height: 1200,
+            altText: 'App icon image',
+            provider: 'gemini',
+          },
+        ],
+      }),
+    });
+  });
+});
+
 test.describe('Image Generation Flow E2E', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/dashboard');
@@ -150,8 +205,8 @@ test.describe('Image Generation Flow E2E', () => {
   });
 
   test('show alt text for accessibility', async ({ page }) => {
-    // All images should have alt text
-    const images = page.getByRole('img');
+    // Real <img> elements only (svg icons expose role="img" but use aria, not alt).
+    const images = page.locator('img');
     const imageCount = await images.count();
 
     if (imageCount > 0) {
@@ -236,7 +291,7 @@ test.describe('Image Generation - Batch Operations', () => {
       for (let i = 0; i < 3; i++) {
         await addFeatureButton.click();
 
-        const featureInputs = page.getByLabel(/feature/i);
+        const featureInputs = page.getByPlaceholder(/feature/i);
         await featureInputs.nth(i).fill(`Feature ${i + 1}`);
       }
     }

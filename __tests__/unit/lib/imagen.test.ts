@@ -1,32 +1,52 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Store mock implementations for later access
-let mockGenerateImages: ReturnType<typeof vi.fn>;
+// Store mock implementation for later access. The Gemini image model is driven
+// through `ai.models.generateContent` (native `gemini-3.1-flash-image`), not the
+// retired `imagen-4.0` / `gemini-2.0-flash-exp` calls.
+let mockGenerateContent: ReturnType<typeof vi.fn>;
 
-// Mock the @google/genai module before any imports
 vi.mock('@google/genai', () => {
   return {
     GoogleGenAI: class MockGoogleGenAI {
-      models: { generateImages: ReturnType<typeof vi.fn> };
+      models: { generateContent: ReturnType<typeof vi.fn> };
       constructor() {
-        this.models = {
-          generateImages: mockGenerateImages,
-        };
+        this.models = { generateContent: mockGenerateContent };
       }
     },
-    Modality: {
-      IMAGE: 'IMAGE',
-    },
+    Modality: { IMAGE: 'IMAGE', TEXT: 'TEXT' },
   };
 });
 
-import { createImagenClient, ImagenError, SHOPIFY_IMAGE_SPECS } from '@/lib/imagen';
+import {
+  createImagenClient,
+  ImagenError,
+  SHOPIFY_IMAGE_SPECS,
+  selectScreenshotSubset,
+  type ReferenceScreenshot,
+} from '@/lib/imagen';
+import { clearDeadModelCache } from '@/lib/model-resolver';
 
-describe('Imagen Client', () => {
+function imageResponse(
+  base64: string = Buffer.from('generated-image-bytes').toString('base64'),
+  mimeType = 'image/png'
+) {
+  return {
+    candidates: [{ content: { parts: [{ inlineData: { data: base64, mimeType } }] } }],
+  };
+}
+
+function textOnlyResponse() {
+  return {
+    candidates: [{ content: { parts: [{ text: 'no image was produced' }] } }],
+  };
+}
+
+describe('Imagen Client (Gemini native image generation)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset mock function
-    mockGenerateImages = vi.fn();
+    mockGenerateContent = vi.fn();
+    clearDeadModelCache();
+    delete process.env.GEMINI_IMAGE_MODEL;
   });
 
   afterEach(() => {
@@ -45,13 +65,6 @@ describe('Imagen Client', () => {
       expect(SHOPIFY_IMAGE_SPECS.featureImage.height).toBe(900);
       expect(SHOPIFY_IMAGE_SPECS.featureImage.aspectRatio).toBe('16:9');
     });
-
-    it('specifies correct formats for both image types', () => {
-      expect(SHOPIFY_IMAGE_SPECS.appIcon.formats).toContain('png');
-      expect(SHOPIFY_IMAGE_SPECS.appIcon.formats).toContain('jpeg');
-      expect(SHOPIFY_IMAGE_SPECS.featureImage.formats).toContain('png');
-      expect(SHOPIFY_IMAGE_SPECS.featureImage.formats).toContain('jpeg');
-    });
   });
 
   describe('createImagenClient', () => {
@@ -64,208 +77,89 @@ describe('Imagen Client', () => {
       expect(() => createImagenClient('   ')).toThrow(ImagenError);
     });
 
-    it('creates client with valid API key', () => {
+    it('creates client with the expected public methods', () => {
       const client = createImagenClient('test-api-key');
-      expect(client).toBeDefined();
-      expect(client.generateImages).toBeDefined();
       expect(client.generateAppIcon).toBeDefined();
       expect(client.generateFeatureImage).toBeDefined();
+      expect(client.generateFeatureImageWithScreenshots).toBeDefined();
       expect(client.generateAllImages).toBeDefined();
     });
   });
 
   describe('ImagenError', () => {
-    it('has correct name', () => {
-      const error = new ImagenError('Test error');
+    it('has correct name and carries code + statusCode', () => {
+      const error = new ImagenError('Test error', 'UPSTREAM', 502, { detail: 'info' });
       expect(error.name).toBe('ImagenError');
-    });
-
-    it('stores code and details', () => {
-      const error = new ImagenError('Test error', 'TEST_CODE', { detail: 'info' });
-      expect(error.code).toBe('TEST_CODE');
+      expect(error.code).toBe('UPSTREAM');
+      expect(error.statusCode).toBe(502);
       expect(error.details).toEqual({ detail: 'info' });
     });
   });
 
-  describe('generateImages', () => {
-    it('throws error if prompt is empty', async () => {
-      const client = createImagenClient('test-api-key');
-
-      await expect(client.generateImages({ prompt: '', type: 'icon' })).rejects.toThrow(
-        'Prompt is required'
-      );
-    });
-
-    it('throws error if prompt is whitespace', async () => {
-      const client = createImagenClient('test-api-key');
-
-      await expect(client.generateImages({ prompt: '   ', type: 'icon' })).rejects.toThrow(
-        'Prompt is required'
-      );
-    });
-
-    it('calls API with correct parameters for icon', async () => {
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: Buffer.from('test-image-data').toString('base64'),
-            },
-          },
-        ],
-      });
-
-      const client = createImagenClient('test-api-key');
-      await client.generateImages({
-        prompt: 'Test icon prompt',
-        type: 'icon',
-        numberOfImages: 1,
-      });
-
-      expect(mockGenerateImages).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'imagen-4.0-generate-001',
-          config: expect.objectContaining({
-            aspectRatio: '1:1',
-            numberOfImages: 1,
-          }),
-        })
-      );
-    });
-
-    it('calls API with correct parameters for feature image', async () => {
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: Buffer.from('test-image-data').toString('base64'),
-            },
-          },
-        ],
-      });
-
-      const client = createImagenClient('test-api-key');
-      await client.generateImages({
-        prompt: 'Test feature prompt',
-        type: 'feature',
-        numberOfImages: 1,
-      });
-
-      expect(mockGenerateImages).toHaveBeenCalledWith(
-        expect.objectContaining({
-          config: expect.objectContaining({
-            aspectRatio: '16:9',
-          }),
-        })
-      );
-    });
-
-    it('throws error when no images are generated', async () => {
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [],
-      });
-
-      const client = createImagenClient('test-api-key');
-      await expect(client.generateImages({ prompt: 'Test', type: 'icon' })).rejects.toThrow(
-        'No images were generated'
-      );
-    });
-
-    it('returns correctly formatted images', async () => {
-      const testImageData = Buffer.from('test-image-data').toString('base64');
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: testImageData,
-            },
-          },
-        ],
-      });
-
-      const client = createImagenClient('test-api-key');
-      const result = await client.generateImages({
-        prompt: 'Test prompt',
-        type: 'icon',
-      });
-
-      expect(result.images).toHaveLength(1);
-      expect(result.images[0]).toMatchObject({
-        type: 'icon',
-        mimeType: 'image/png',
-        width: 1200,
-        height: 1200,
-      });
-      expect(result.images[0].url).toContain('data:image/png;base64,');
-      expect(result.model).toBe('imagen-4.0-generate-001');
-      expect(result.generatedAt).toBeDefined();
-    });
-  });
-
   describe('generateAppIcon', () => {
-    it('generates icon with correct dimensions', async () => {
-      const testImageData = Buffer.from('icon-data').toString('base64');
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: testImageData,
-            },
-          },
-        ],
-      });
+    it('calls generateContent with the resolved image model and 1:1 / 2K imageConfig', async () => {
+      mockGenerateContent.mockResolvedValue(imageResponse());
 
       const client = createImagenClient('test-api-key');
       const image = await client.generateAppIcon('Test App', 'A test application');
 
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gemini-3.1-flash-image',
+          config: expect.objectContaining({
+            responseModalities: ['TEXT', 'IMAGE'],
+            imageConfig: expect.objectContaining({ aspectRatio: '1:1', imageSize: '2K' }),
+          }),
+        })
+      );
+
       expect(image.type).toBe('icon');
-      expect(image.width).toBe(1200);
-      expect(image.height).toBe(1200);
+      expect(Buffer.isBuffer(image.buffer)).toBe(true);
+      expect(image.buffer.length).toBeGreaterThan(0);
+      expect(image.usedScreenshots).toBe(false);
       expect(image.altText).toBe('Test App app icon');
     });
 
-    it('sanitizes Shopify branding from prompt', async () => {
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: Buffer.from('test').toString('base64'),
-            },
-          },
-        ],
-      });
+    it('sanitizes Shopify branding from the icon prompt', async () => {
+      mockGenerateContent.mockResolvedValue(imageResponse());
 
       const client = createImagenClient('test-api-key');
       await client.generateAppIcon('Shopify App', 'Best Shopify integration');
 
-      // Verify the mock was called
-      expect(mockGenerateImages).toHaveBeenCalled();
+      const callArg = mockGenerateContent.mock.calls[0][0] as {
+        contents: Array<{ text?: string }>;
+      };
+      const textPart = callArg.contents.find((p) => typeof p.text === 'string')?.text ?? '';
+      expect(textPart).toContain('"App"');
+      expect(textPart).not.toContain('"Shopify App"');
+      expect(textPart).toContain('Best integration');
+    });
 
-      // Get the actual call argument
-      const callArg = mockGenerateImages.mock.calls[0][0];
+    it('throws NO_IMAGE ImagenError when the model returns no image part', async () => {
+      mockGenerateContent.mockResolvedValue(textOnlyResponse());
 
-      // Verify the app name "Shopify App" was sanitized to just "App"
-      expect(callArg.prompt).toContain('"App"');
-      expect(callArg.prompt).not.toContain('"Shopify App"');
+      const client = createImagenClient('test-api-key');
+      await expect(client.generateAppIcon('Test App')).rejects.toMatchObject({
+        name: 'ImagenError',
+        code: 'NO_IMAGE',
+      });
+    });
 
-      // Verify the description "Best Shopify integration" was sanitized to "Best integration"
-      expect(callArg.prompt).toContain('Best integration');
-      expect(callArg.prompt).not.toContain('Best Shopify integration');
+    it('maps an upstream SDK failure to an UPSTREAM/502 ImagenError', async () => {
+      mockGenerateContent.mockRejectedValue(new Error('network exploded'));
+
+      const client = createImagenClient('test-api-key');
+      await expect(client.generateAppIcon('Test App')).rejects.toMatchObject({
+        name: 'ImagenError',
+        code: 'UPSTREAM',
+        statusCode: 502,
+      });
     });
   });
 
   describe('generateFeatureImage', () => {
-    it('generates feature image with correct dimensions', async () => {
-      const testImageData = Buffer.from('feature-data').toString('base64');
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: testImageData,
-            },
-          },
-        ],
-      });
+    it('generates a feature image at 16:9 with usedScreenshots=false', async () => {
+      mockGenerateContent.mockResolvedValue(imageResponse());
 
       const client = createImagenClient('test-api-key');
       const image = await client.generateFeatureImage(
@@ -274,24 +168,85 @@ describe('Imagen Client', () => {
         'A powerful analytics dashboard'
       );
 
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            imageConfig: expect.objectContaining({ aspectRatio: '16:9', imageSize: '2K' }),
+          }),
+        })
+      );
       expect(image.type).toBe('feature');
-      expect(image.width).toBe(1600);
-      expect(image.height).toBe(900);
+      expect(image.usedScreenshots).toBe(false);
+      expect(image.featureText).toBe('Dashboard Analytics');
       expect(image.altText).toBe('Test App - Dashboard Analytics');
+      expect(Buffer.isBuffer(image.buffer)).toBe(true);
+    });
+  });
+
+  describe('generateFeatureImageWithScreenshots', () => {
+    const screenshots: ReferenceScreenshot[] = [
+      { base64: 'c2hvdDE=', mimeType: 'image/png' },
+      { base64: 'c2hvdDI=', mimeType: 'image/jpeg' },
+    ];
+
+    it('passes screenshots as inline image parts and reports usedScreenshots=true', async () => {
+      mockGenerateContent.mockResolvedValue(imageResponse());
+
+      const client = createImagenClient('test-api-key');
+      const image = await client.generateFeatureImageWithScreenshots({
+        appName: 'Test App',
+        featureText: 'Live sync',
+        description: 'Keeps data in sync',
+        screenshots,
+      });
+
+      const callArg = mockGenerateContent.mock.calls[0][0] as {
+        contents: Array<{ inlineData?: { data: string } }>;
+      };
+      const inlineParts = callArg.contents.filter((p) => p.inlineData);
+      expect(inlineParts.length).toBeGreaterThan(0);
+      expect(inlineParts[0].inlineData?.data).toBe('c2hvdDE=');
+
+      expect(image.type).toBe('feature');
+      expect(image.usedScreenshots).toBe(true);
+      expect(Buffer.isBuffer(image.buffer)).toBe(true);
+    });
+
+    it('falls back to prompt-only generation (usedScreenshots=false) when the screenshot-guided call yields no image', async () => {
+      mockGenerateContent
+        .mockResolvedValueOnce(textOnlyResponse()) // screenshot-guided call: no image
+        .mockResolvedValueOnce(imageResponse()); // prompt-only fallback: image
+
+      const client = createImagenClient('test-api-key');
+      const image = await client.generateFeatureImageWithScreenshots({
+        appName: 'Test App',
+        featureText: 'Live sync',
+        screenshots,
+      });
+
+      expect(image.usedScreenshots).toBe(false);
+      expect(Buffer.isBuffer(image.buffer)).toBe(true);
+      expect(mockGenerateContent).toHaveBeenCalledTimes(2);
+    });
+
+    it('falls back to prompt-only generation when no screenshots are supplied', async () => {
+      mockGenerateContent.mockResolvedValue(imageResponse());
+
+      const client = createImagenClient('test-api-key');
+      const image = await client.generateFeatureImageWithScreenshots({
+        appName: 'Test App',
+        featureText: 'Live sync',
+        screenshots: [],
+      });
+
+      expect(image.usedScreenshots).toBe(false);
+      expect(mockGenerateContent).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('generateAllImages', () => {
-    it('generates icon and feature images', async () => {
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: Buffer.from('image-data').toString('base64'),
-            },
-          },
-        ],
-      });
+    it('generates 1 icon + up to 3 feature images', async () => {
+      mockGenerateContent.mockResolvedValue(imageResponse());
 
       const client = createImagenClient('test-api-key');
       const images = await client.generateAllImages('Test App', 'A test application', [
@@ -299,60 +254,64 @@ describe('Imagen Client', () => {
         'Feature 2',
       ]);
 
-      // Should have 1 icon + 2 feature images
       expect(images).toHaveLength(3);
       expect(images[0].type).toBe('icon');
       expect(images[1].type).toBe('feature');
       expect(images[2].type).toBe('feature');
     });
 
-    it('limits feature images to maximum of 3', async () => {
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: Buffer.from('image-data').toString('base64'),
-            },
-          },
-        ],
-      });
+    it('marks feature images usedScreenshots=true when screenshots are provided', async () => {
+      mockGenerateContent.mockResolvedValue(imageResponse());
+      const shots: ReferenceScreenshot[] = [
+        { base64: 'YQ==', mimeType: 'image/png' },
+        { base64: 'Yg==', mimeType: 'image/png' },
+        { base64: 'Yw==', mimeType: 'image/png' },
+      ];
 
       const client = createImagenClient('test-api-key');
-      const images = await client.generateAllImages('Test App', 'Description', [
-        'Feature 1',
-        'Feature 2',
-        'Feature 3',
-        'Feature 4',
-        'Feature 5',
-      ]);
+      const images = await client.generateAllImages('Test App', 'desc', ['F1', 'F2'], shots);
 
-      // Should have 1 icon + 3 feature images (max 3)
-      expect(images).toHaveLength(4);
-      // generateImages should be called 4 times (1 icon + 3 features)
-      expect(mockGenerateImages).toHaveBeenCalledTimes(4);
+      const features = images.filter((i) => i.type === 'feature');
+      expect(features.every((f) => f.usedScreenshots)).toBe(true);
+    });
+  });
+
+  describe('selectScreenshotSubset', () => {
+    const shots: ReferenceScreenshot[] = [
+      { base64: 's0', mimeType: 'image/png' },
+      { base64: 's1', mimeType: 'image/png' },
+      { base64: 's2', mimeType: 'image/png' },
+      { base64: 's3', mimeType: 'image/png' },
+    ];
+
+    const asSet = (arr: ReferenceScreenshot[]) => new Set(arr.map((s) => s.base64));
+    const setsEqual = (a: Set<string>, b: Set<string>) =>
+      a.size === b.size && [...a].every((x) => b.has(x));
+
+    it('returns pairwise-distinct sets across feature indices when 2+ screenshots exist', () => {
+      const s0 = asSet(selectScreenshotSubset(shots, 0));
+      const s1 = asSet(selectScreenshotSubset(shots, 1));
+      const s2 = asSet(selectScreenshotSubset(shots, 2));
+      expect(setsEqual(s0, s1)).toBe(false);
+      expect(setsEqual(s1, s2)).toBe(false);
+      expect(setsEqual(s0, s2)).toBe(false);
     });
 
-    it('filters empty features', async () => {
-      mockGenerateImages.mockResolvedValue({
-        generatedImages: [
-          {
-            image: {
-              imageBytes: Buffer.from('image-data').toString('base64'),
-            },
-          },
-        ],
-      });
+    it('never produces identical sets for consecutive indices with exactly two screenshots', () => {
+      const two = shots.slice(0, 2);
+      const a = asSet(selectScreenshotSubset(two, 0));
+      const b = asSet(selectScreenshotSubset(two, 1));
+      expect(setsEqual(a, b)).toBe(false);
+    });
 
-      const client = createImagenClient('test-api-key');
-      const images = await client.generateAllImages('Test App', 'Description', [
-        'Feature 1',
-        '',
-        '   ',
-        'Feature 2',
-      ]);
+    it('returns the single screenshot for every index when only one exists', () => {
+      const one = shots.slice(0, 1);
+      expect(selectScreenshotSubset(one, 0).map((s) => s.base64)).toEqual(['s0']);
+      expect(selectScreenshotSubset(one, 5).map((s) => s.base64)).toEqual(['s0']);
+    });
 
-      // Should have 1 icon + 2 non-empty feature images
-      expect(images).toHaveLength(3);
+    it('returns an empty array when there are no screenshots', () => {
+      expect(selectScreenshotSubset([], 0)).toEqual([]);
     });
   });
 });
