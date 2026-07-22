@@ -73,6 +73,16 @@ const themeOptions = [
   { id: 'system' as const, name: 'System', icon: Monitor, description: 'Follow system preference' },
 ];
 
+// Selected radio-card options render their description over a bg-primary/5
+// tint. text-muted-foreground (#62748e) only hits 4.29:1 against that tinted
+// background (#f3f3f4), below WCAG AA's 4.5:1 floor for normal text -- so the
+// selected state needs a darker shade. text-slate-600 (#475569) measures
+// ~6.83:1 against the same tint, comfortably clearing AA. In dark mode the
+// tint sits on the dark card and text-muted-foreground already clears AA
+// there (~6.08:1), so we keep it for that theme rather than swapping in a
+// color tuned for light-mode contrast.
+const selectedDescriptionClass = 'text-slate-600 dark:text-muted-foreground';
+
 const screenshotSourceOptions = [
   {
     id: 'website' as const,
@@ -324,7 +334,16 @@ export default function SettingsPage() {
                           <Check className="h-4 w-4 text-primary" aria-hidden="true" />
                         )}
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{model.description}</p>
+                      <p
+                        className={cn(
+                          'mt-1 text-sm',
+                          settings.selectedModel === model.id
+                            ? selectedDescriptionClass
+                            : 'text-muted-foreground'
+                        )}
+                      >
+                        {model.description}
+                      </p>
                     </button>
                   ))}
                 </div>
@@ -357,7 +376,16 @@ export default function SettingsPage() {
                     >
                       <option.icon className="h-6 w-6 mb-2" aria-hidden="true" />
                       <span className="font-medium">{option.name}</span>
-                      <p className="mt-1 text-xs text-muted-foreground">{option.description}</p>
+                      <p
+                        className={cn(
+                          'mt-1 text-xs',
+                          settings.theme === option.id
+                            ? selectedDescriptionClass
+                            : 'text-muted-foreground'
+                        )}
+                      >
+                        {option.description}
+                      </p>
                       {settings.theme === option.id && (
                         <Check className="h-4 w-4 text-primary mt-2" aria-hidden="true" />
                       )}
@@ -404,7 +432,16 @@ export default function SettingsPage() {
                           <Check className="h-4 w-4 text-primary" aria-hidden="true" />
                         )}
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{option.description}</p>
+                      <p
+                        className={cn(
+                          'mt-1 text-sm',
+                          settings.screenshotSource === option.id
+                            ? selectedDescriptionClass
+                            : 'text-muted-foreground'
+                        )}
+                      >
+                        {option.description}
+                      </p>
                     </button>
                   ))}
                 </div>
