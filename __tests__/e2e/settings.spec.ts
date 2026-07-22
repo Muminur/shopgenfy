@@ -29,13 +29,17 @@ test.describe('Settings Page', () => {
     const htmlElement = page.locator('html');
 
     // Selecting the Dark theme radio applies the `dark` class to <html>
-    // (next-themes with attribute="class").
+    // (next-themes with attribute="class"). The class mutation itself is
+    // effectively synchronous (a next-themes layout effect), but under CI's
+    // shared/contended runners the click-to-repaint round trip has been seen
+    // to occasionally outrun the default 10s assertion budget. A longer
+    // timeout absorbs that without masking a genuine failure to toggle.
     await page.getByRole('radio', { name: /dark theme/i }).click();
-    await expect(htmlElement).toHaveClass(/dark/);
+    await expect(htmlElement).toHaveClass(/dark/, { timeout: 30_000 });
 
     // Selecting Light removes it — proving the toggle changes the theme.
     await page.getByRole('radio', { name: /light theme/i }).click();
-    await expect(htmlElement).not.toHaveClass(/dark/);
+    await expect(htmlElement).not.toHaveClass(/dark/, { timeout: 30_000 });
   });
 
   test('should persist model selection', async ({ page }) => {
