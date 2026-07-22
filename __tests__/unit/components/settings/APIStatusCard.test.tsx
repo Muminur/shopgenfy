@@ -229,13 +229,14 @@ describe('APIStatusCard', () => {
       const { container } = render(<APIStatusCard />);
 
       await waitFor(() => {
-        // Check for green indicator class
-        const indicators = container.querySelectorAll('.bg-green-500');
+        // Semantic success token (contrast-verified in globals.css), not a
+        // hardcoded Tailwind shade.
+        const indicators = container.querySelectorAll('.bg-success');
         expect(indicators.length).toBeGreaterThanOrEqual(2);
       });
     });
 
-    it('should show red indicator for disconnected status', async () => {
+    it('should show destructive indicator for disconnected status', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -248,8 +249,8 @@ describe('APIStatusCard', () => {
       const { container } = render(<APIStatusCard />);
 
       await waitFor(() => {
-        // Check for red indicator class
-        const indicators = container.querySelectorAll('.bg-red-500');
+        // Semantic destructive token, not a hardcoded Tailwind shade.
+        const indicators = container.querySelectorAll('.bg-destructive');
         expect(indicators.length).toBeGreaterThanOrEqual(2);
       });
     });

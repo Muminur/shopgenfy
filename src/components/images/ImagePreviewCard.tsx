@@ -36,7 +36,12 @@ export const ImagePreviewCard = memo(function ImagePreviewCard({
   const aspectRatio = image.type === 'icon' ? 'aspect-square' : 'aspect-video';
 
   return (
-    <Card className={cn('overflow-hidden', className)}>
+    <Card
+      className={cn(
+        'overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-300 motion-safe:ease-out',
+        className
+      )}
+    >
       <CardContent className="p-0 relative">
         <div className={cn('relative w-full', aspectRatio)}>
           {isRegenerating ? (

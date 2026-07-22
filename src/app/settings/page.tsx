@@ -73,15 +73,11 @@ const themeOptions = [
   { id: 'system' as const, name: 'System', icon: Monitor, description: 'Follow system preference' },
 ];
 
-// Selected radio-card options render their description over a bg-primary/5
-// tint. text-muted-foreground (#62748e) only hits 4.29:1 against that tinted
-// background (#f3f3f4), below WCAG AA's 4.5:1 floor for normal text -- so the
-// selected state needs a darker shade. text-slate-600 (#475569) measures
-// ~6.83:1 against the same tint, comfortably clearing AA. In dark mode the
-// tint sits on the dark card and text-muted-foreground already clears AA
-// there (~6.08:1), so we keep it for that theme rather than swapping in a
-// color tuned for light-mode contrast.
-const selectedDescriptionClass = 'text-slate-600 dark:text-muted-foreground';
+// Selected radio-card options render their description on the `accent`
+// surface, whose `accent-foreground` pairing is contrast-verified (>10:1 in
+// both themes -- see globals.css) rather than reusing `muted-foreground`
+// against an ad hoc tint, which is what caused a WCAG failure here before.
+const selectedDescriptionClass = 'text-accent-foreground';
 
 const screenshotSourceOptions = [
   {
@@ -330,7 +326,7 @@ export default function SettingsPage() {
                       aria-label={`${model.name}: ${model.description}`}
                       className={cn(
                         'relative flex flex-col items-start rounded-lg border p-4 text-left transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-                        settings.selectedModel === model.id && 'border-primary bg-primary/5'
+                        settings.selectedModel === model.id && 'border-primary bg-accent'
                       )}
                     >
                       {model.recommended && (
@@ -341,7 +337,10 @@ export default function SettingsPage() {
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{model.name}</span>
                         {settings.selectedModel === model.id && (
-                          <Check className="h-4 w-4 text-primary" aria-hidden="true" />
+                          <Check
+                            className="h-4 w-4 text-primary motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-150"
+                            aria-hidden="true"
+                          />
                         )}
                       </div>
                       <p
@@ -381,7 +380,7 @@ export default function SettingsPage() {
                       aria-label={`${option.name} theme: ${option.description}`}
                       className={cn(
                         'flex flex-col items-center rounded-lg border p-4 transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-                        settings.theme === option.id && 'border-primary bg-primary/5'
+                        settings.theme === option.id && 'border-primary bg-accent'
                       )}
                     >
                       <option.icon className="h-6 w-6 mb-2" aria-hidden="true" />
@@ -397,7 +396,10 @@ export default function SettingsPage() {
                         {option.description}
                       </p>
                       {settings.theme === option.id && (
-                        <Check className="h-4 w-4 text-primary mt-2" aria-hidden="true" />
+                        <Check
+                          className="h-4 w-4 text-primary mt-2 motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-150"
+                          aria-hidden="true"
+                        />
                       )}
                     </button>
                   ))}
@@ -432,14 +434,17 @@ export default function SettingsPage() {
                       aria-label={`${option.name}: ${option.description}`}
                       className={cn(
                         'flex flex-col items-start rounded-lg border p-4 text-left transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-                        settings.screenshotSource === option.id && 'border-primary bg-primary/5'
+                        settings.screenshotSource === option.id && 'border-primary bg-accent'
                       )}
                     >
                       <div className="flex items-center gap-2">
                         <option.icon className="h-4 w-4" aria-hidden="true" />
                         <span className="font-medium">{option.name}</span>
                         {settings.screenshotSource === option.id && (
-                          <Check className="h-4 w-4 text-primary" aria-hidden="true" />
+                          <Check
+                            className="h-4 w-4 text-primary motion-safe:animate-in motion-safe:zoom-in-50 motion-safe:duration-150"
+                            aria-hidden="true"
+                          />
                         )}
                       </div>
                       <p

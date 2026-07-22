@@ -30,9 +30,11 @@ export function ProgressBar({ value, label, showText, className }: ProgressBarPr
         aria-valuemax={100}
         className="h-2 w-full overflow-hidden rounded-full bg-secondary"
       >
+        {/* transform: scaleX is compositor-only (never triggers layout, unlike
+            animating width directly) — origin-left so it grows rightward. */}
         <div
-          className="h-full bg-primary transition-all duration-300 ease-in-out"
-          style={{ width: `${clampedValue}%` }}
+          className="h-full w-full origin-left rounded-full bg-primary transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          style={{ transform: `scaleX(${clampedValue / 100})` }}
         />
       </div>
     </div>
