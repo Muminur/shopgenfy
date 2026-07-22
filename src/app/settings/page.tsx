@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { AlertMessage } from '@/components/feedback/AlertMessage';
@@ -115,13 +115,23 @@ export default function SettingsPage() {
   const { setTheme, theme: currentTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
+  // Guards the one-time settings load. next-themes hands back a NEW `setTheme`
+  // identity every time the theme changes, so a `[setTheme]`-keyed effect would
+  // re-fire on every toggle. Without this guard, selecting a theme re-runs the
+  // loader, which re-fetches the persisted default (`theme: 'system'`) and
+  // immediately overwrites the user's choice — the class flips then reverts.
+  const didLoadRef = useRef(false);
+
   // Ensure component is mounted before accessing theme
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Load settings on mount
+  // Load settings on mount (exactly once — see didLoadRef above).
   useEffect(() => {
+    if (didLoadRef.current) return;
+    didLoadRef.current = true;
+
     const readLocalScreenshotSource = (): ScreenshotSource | null => {
       try {
         const stored = localStorage.getItem(SCREENSHOT_SOURCE_STORAGE_KEY);
