@@ -74,6 +74,14 @@ test.describe('Hermetic core flows', () => {
   });
 
   test('image generation stores images served from /api/images/', async ({ page }) => {
+    // This is the first test in the suite to drive a REAL icon+feature
+    // generation round trip (stub fetch -> sharp normalize -> store), and CI
+    // runners have been observed taking 30s+ on that first hit (cold sharp/
+    // native-module load, first connection to the stub) versus <1s locally.
+    // Give the whole test more room so a slow-but-real generation doesn't
+    // collide with the per-test budget once the assertion timeout below grows.
+    test.setTimeout(120_000);
+
     await page.goto('/dashboard');
 
     await page.getByLabel('App Name').fill('Icon Demo App');
@@ -87,7 +95,9 @@ test.describe('Hermetic core flows', () => {
     await page.getByRole('button', { name: 'Generate Images' }).first().click();
 
     // Gallery should render a normalized icon at the exact Shopify spec.
-    await expect(page.getByText('1200×1200')).toBeVisible({ timeout: 30_000 });
+    // 60s (rather than 30s) absorbs CI's cold-start latency on this first
+    // real generation call without masking a genuine hang.
+    await expect(page.getByText('1200×1200')).toBeVisible({ timeout: 60_000 });
 
     // At least one gallery image must be served from the same-origin store.
     // next/image encodes the src into the optimizer URL, so match the encoded form.
