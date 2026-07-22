@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import archiver from 'archiver';
 import { z } from 'zod';
 import { imageStore, StoredImageEntry } from '@/lib/image-store';
+import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
 
 export const maxDuration = 60;
+
+// Each call assembles a ZIP in memory, so cap per-client throughput.
+const rateLimiter = createRateLimiter(rateLimitConfigs.export);
 
 /**
  * Stateless export. Accepts the current form payload plus the ids of images
@@ -161,6 +165,11 @@ HOW TO SUBMIT
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimitResponse = await rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   let rawBody: unknown;
   try {
     rawBody = await request.json();

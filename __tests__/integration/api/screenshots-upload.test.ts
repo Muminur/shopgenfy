@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import sharp from 'sharp';
 import { imageStore } from '@/lib/image-store';
+import { clearRateLimitStore } from '@/lib/middleware/rate-limiter';
 
 async function makePng(width: number, height: number): Promise<Buffer> {
   return sharp({
@@ -33,6 +34,7 @@ function uploadRequest(
 describe('POST /api/screenshots/upload', () => {
   beforeEach(() => {
     imageStore.clear();
+    clearRateLimitStore();
   });
 
   it('normalizes an uploaded PNG to the exact icon spec and stores it as provider "upload"', async () => {
@@ -139,4 +141,22 @@ describe('POST /api/screenshots/upload', () => {
     const response = await POST(uploadRequest(png, 'x.png', 'image/png'));
     expect(response.status).toBe(400);
   });
+
+  it('rate-limits uploads once the per-minute cap is exceeded (429), leaving the folder-upload flow room', async () => {
+    const { POST } = await import('@/app/api/screenshots/upload/route');
+    const png = await makePng(120, 120);
+    const cap = 20; // matches rateLimitConfigs.screenshots.upload — a full 20-file folder upload fits.
+
+    // A full sequential folder upload (cap files from the same client) all succeed.
+    const statuses: number[] = [];
+    for (let i = 0; i < cap; i++) {
+      const res = await POST(uploadRequest(png, `shot-${i}.png`, 'image/png', { kind: 'feature' }));
+      statuses.push(res.status);
+    }
+    expect(statuses.every((s) => s === 200)).toBe(true);
+
+    // The next request from the same client crosses the cap and is blocked.
+    const blocked = await POST(uploadRequest(png, 'extra.png', 'image/png', { kind: 'feature' }));
+    expect(blocked.status).toBe(429);
+  }, 20000);
 });

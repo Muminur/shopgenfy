@@ -218,6 +218,21 @@ export const rateLimitConfigs = {
       windowMs: 60000, // 1 minute (very expensive)
     } as RateLimitConfig,
   },
+  screenshots: {
+    upload: {
+      // Looser than the AI-generation caps: the folder-upload dropzone sends up
+      // to 20 files sequentially, one request each, so a full folder must fit in
+      // a single window. Sharp work is CPU/memory-bound, hence still capped.
+      requests: 20,
+      windowMs: 60000, // 1 minute
+    } as RateLimitConfig,
+  },
+  export: {
+    // Each call builds a ZIP in memory; stricter than uploads but generous
+    // enough for repeated export attempts.
+    requests: 10,
+    windowMs: 60000, // 1 minute
+  } as RateLimitConfig,
 };
 
 /**

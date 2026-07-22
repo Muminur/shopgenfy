@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
 import AdmZip from 'adm-zip';
 import { POST } from '@/app/api/export/route';
 import { imageStore } from '@/lib/image-store';
+import { clearRateLimitStore } from '@/lib/middleware/rate-limiter';
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -40,6 +41,7 @@ const baseSubmission = {
 describe('POST /api/export (stateless)', () => {
   beforeEach(() => {
     imageStore.clear();
+    clearRateLimitStore();
   });
 
   it('returns a zip with real PNG bytes for the icon and feature images', async () => {
@@ -143,5 +145,20 @@ describe('POST /api/export (stateless)', () => {
 
     const response = await POST(bad);
     expect(response.status).toBe(400);
+  });
+
+  it('rate-limits exports once the per-minute cap is exceeded (429)', async () => {
+    const cap = 10; // matches rateLimitConfigs.export
+
+    const statuses: number[] = [];
+    for (let i = 0; i < cap; i++) {
+      const res = await POST(makeRequest({ submission: baseSubmission, imageIds: [] }));
+      statuses.push(res.status);
+    }
+    expect(statuses.every((s) => s === 200)).toBe(true);
+
+    // The next export from the same client crosses the cap and is blocked.
+    const blocked = await POST(makeRequest({ submission: baseSubmission, imageIds: [] }));
+    expect(blocked.status).toBe(429);
   });
 });

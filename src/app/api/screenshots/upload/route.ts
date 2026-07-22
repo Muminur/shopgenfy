@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeImage, ImageNormalizeError } from '@/lib/image-normalizer';
 import { imageStore } from '@/lib/image-store';
+import { createRateLimiter, rateLimitConfigs } from '@/lib/middleware/rate-limiter';
 
 export const maxDuration = 30;
+
+// This route runs unauthenticated sharp (CPU/memory) work per request. A looser
+// cap than the AI-generation routes keeps the 20-file sequential folder upload
+// working while still bounding abuse.
+const rateLimiter = createRateLimiter(rateLimitConfigs.screenshots.upload);
 
 /**
  * Direct-use screenshot upload. A user-supplied image (folder mode, or a
@@ -23,6 +29,11 @@ const VALID_KINDS = ['icon', 'feature'] as const;
 type Kind = (typeof VALID_KINDS)[number];
 
 export async function POST(request: NextRequest) {
+  const rateLimitResponse = await rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const contentType = request.headers.get('content-type') || '';
   if (!contentType.includes('multipart/form-data')) {
     return NextResponse.json(
