@@ -161,7 +161,11 @@ describe('Dashboard extracted-screenshots direct-use', () => {
   it('uses analyzed-source screenshots directly as feature images without any AI generation', async () => {
     const user = userEvent.setup();
 
+    render(<DashboardPage />);
+
     // 1) An analysis that harvested a screenshot candidate (base64 bytes).
+    //    Queued after render so the mount-time GET /api/settings consumes the
+    //    default mock and this response goes to the analyze call.
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -175,7 +179,6 @@ describe('Dashboard extracted-screenshots direct-use', () => {
       }),
     });
 
-    render(<DashboardPage />);
     await user.type(screen.getByLabelText(/landing page url/i), 'https://example.com');
     await user.click(screen.getByRole('button', { name: /analyze with ai/i }));
 

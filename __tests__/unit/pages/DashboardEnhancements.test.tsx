@@ -121,7 +121,13 @@ describe('Dashboard Page - Milestone 6 Enhancements', () => {
 
         vi.advanceTimersByTime(5000);
 
-        expect(global.fetch).not.toHaveBeenCalled();
+        // The mount effect may read GET /api/settings, but no auto-save
+        // (POST/PUT to /api/submissions) must fire without user interaction.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const submissionCalls = (global.fetch as any).mock.calls.filter((call: any) =>
+          String(call[0]).includes('/api/submissions')
+        );
+        expect(submissionCalls.length).toBe(0);
       } finally {
         vi.useRealTimers();
       }

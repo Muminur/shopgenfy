@@ -147,9 +147,11 @@ describe('Dashboard input-source tabs', () => {
 
   it('applies analysis results identically for a non-URL source (GitHub autofill)', async () => {
     const user = userEvent.setup();
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => analysisResult });
 
+    // Queue the analysis response AFTER render so the mount-time GET /api/settings
+    // consumes the default mock and the analyze call gets the analysisResult.
     render(<DashboardPage />);
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => analysisResult });
     await user.click(screen.getByRole('tab', { name: /github/i }));
     await user.type(
       screen.getByLabelText(/github repository/i),

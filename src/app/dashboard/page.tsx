@@ -41,12 +41,21 @@ import { PricingConfig } from '@/types';
 import { usePreviewSync, PreviewFormData } from '@/hooks/usePreviewSync';
 import { apiFetch, saveDraft, SUBMISSION_ID_STORAGE_KEY } from '@/lib/api-client';
 import type { StoredImage } from '@/lib/image-store';
+import {
+  getEligibleScreenshots,
+  type ExtractedScreenshot,
+  type ScreenshotOrigin,
+  type ScreenshotSource,
+} from '@/lib/screenshot-eligibility';
 import { cn } from '@/lib/utils';
 
 // Screenshot-source preference (Settings) persisted client-side so the
 // dashboard honors it even when the settings API/DB is unavailable.
 const SCREENSHOT_SOURCE_STORAGE_KEY = 'shopgenfy_screenshot_source';
-type ScreenshotSource = 'website' | 'repo' | 'folder';
+
+function isValidScreenshotSource(value: unknown): value is ScreenshotSource {
+  return value === 'website' || value === 'repo' || value === 'folder';
+}
 
 // Decode a base64 payload (an analyzed-source screenshot) into a Blob so it can
 // be uploaded through the same normalize+store route as folder uploads.
@@ -161,16 +170,10 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   // Screenshots extracted from any analyzed source (URL / GitHub repo / local
-  // source) for Imagen feature image generation. `url` is optional because
-  // GitHub and uploaded-zip screenshots carry only decoded bytes, no source URL.
-  const [extractedScreenshots, setExtractedScreenshots] = useState<
-    {
-      url?: string;
-      base64?: string;
-      mimeType?: string;
-      alt?: string;
-    }[]
-  >([]);
+  // source) for Imagen feature image generation. Each is tagged with its origin
+  // (`sourceType`) so the Settings screenshot-source preference can decide which
+  // ones are eligible to feed feature images.
+  const [extractedScreenshots, setExtractedScreenshots] = useState<ExtractedScreenshot[]>([]);
 
   // Which input source the user is analyzing from. All three funnel through the
   // shared applyAnalysis() result-application path.
@@ -186,14 +189,41 @@ export default function DashboardPage() {
   const [isUsingScreenshots, setIsUsingScreenshots] = useState(false);
 
   useEffect(() => {
+    // 1) Immediate localStorage read so the preference applies even offline /
+    //    with the settings DB down (a supported first-class state for this app).
     try {
       const stored = localStorage.getItem(SCREENSHOT_SOURCE_STORAGE_KEY);
-      if (stored === 'website' || stored === 'repo' || stored === 'folder') {
+      if (isValidScreenshotSource(stored)) {
         setScreenshotSource(stored);
       }
     } catch {
       /* localStorage unavailable */
     }
+
+    // 2) Refine from the server when reachable. Only override on a VALID server
+    //    value — an empty/error response leaves the localStorage-derived choice
+    //    intact (matching how the Settings page itself falls back).
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch('/api/settings');
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && isValidScreenshotSource(data?.screenshotSource)) {
+          setScreenshotSource(data.screenshotSource);
+          try {
+            localStorage.setItem(SCREENSHOT_SOURCE_STORAGE_KEY, data.screenshotSource);
+          } catch {
+            /* localStorage unavailable */
+          }
+        }
+      } catch {
+        /* settings API unreachable — localStorage value already applied */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Preview sync hook for real-time preview synchronization
@@ -248,16 +278,22 @@ export default function DashboardPage() {
   // to the form's features), and lands screenshots from any source in the same
   // extractedScreenshots state.
   const applyAnalysis = useCallback(
-    (data: {
-      appName?: string;
-      appIntroduction?: string;
-      appDescription?: string;
-      featureList?: string[];
-      languages?: string[];
-      primaryCategory?: string;
-      screenshots?: { url?: string; base64?: string; mimeType?: string; alt?: string }[];
-      warnings?: string[];
-    }) => {
+    (
+      data: {
+        appName?: string;
+        appIntroduction?: string;
+        appDescription?: string;
+        featureList?: string[];
+        languages?: string[];
+        primaryCategory?: string;
+        screenshots?: ExtractedScreenshot[];
+        warnings?: string[];
+      },
+      // Origin of any harvested screenshots (which analyze handler produced
+      // them). Tagged onto each screenshot so the Settings screenshot-source
+      // preference can filter which ones are eligible for feature images.
+      origin: ScreenshotOrigin
+    ) => {
       setFormData((prev) => ({
         ...prev,
         appName: data.appName || prev.appName,
@@ -275,9 +311,13 @@ export default function DashboardPage() {
         data.warnings && data.warnings.length > 0 ? ` Note: ${data.warnings.join(' ')}` : '';
 
       if (data.screenshots && data.screenshots.length > 0) {
-        setExtractedScreenshots(data.screenshots);
+        const tagged = data.screenshots.map((shot) => ({
+          ...shot,
+          sourceType: shot.sourceType ?? origin,
+        }));
+        setExtractedScreenshots(tagged);
         setSuccess(
-          `Analyzed successfully! Found ${data.screenshots.length} screenshot(s) for feature image generation.${warningNote}`
+          `Analyzed successfully! Found ${tagged.length} screenshot(s) for feature image generation.${warningNote}`
         );
       } else {
         setExtractedScreenshots([]);
@@ -304,7 +344,7 @@ export default function DashboardPage() {
         throw new Error('Failed to analyze landing page');
       }
 
-      applyAnalysis(await response.json());
+      applyAnalysis(await response.json(), 'url');
     } catch {
       setError('Failed to analyze landing page. Please try again.');
     } finally {
@@ -330,7 +370,7 @@ export default function DashboardPage() {
         throw new Error(errData.error || 'Failed to analyze repository');
       }
 
-      applyAnalysis(await response.json());
+      applyAnalysis(await response.json(), 'github');
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to analyze the GitHub repository';
@@ -367,7 +407,7 @@ export default function DashboardPage() {
         throw new Error(errData.error || 'Failed to analyze source');
       }
 
-      applyAnalysis(await response.json());
+      applyAnalysis(await response.json(), 'source');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to analyze source';
       setError(`${message}. Please try again.`);
@@ -403,7 +443,12 @@ export default function DashboardPage() {
   // decoded bytes through the same normalize+store upload route, then append the
   // results as feature images — again, no AI generation.
   const handleUseScreenshotsDirectly = useCallback(async () => {
-    const usable = extractedScreenshots.filter((s) => s.base64 && s.mimeType);
+    // Only screenshots whose origin matches the current screenshot-source
+    // preference are eligible (folder = your own uploads/zip; website = url;
+    // repo = github).
+    const usable = getEligibleScreenshots(extractedScreenshots, screenshotSource).filter(
+      (s) => s.base64 && s.mimeType
+    );
     if (usable.length === 0) return;
 
     setIsUsingScreenshots(true);
@@ -435,7 +480,7 @@ export default function DashboardPage() {
     } finally {
       setIsUsingScreenshots(false);
     }
-  }, [extractedScreenshots, handleUploadedScreenshots]);
+  }, [extractedScreenshots, screenshotSource, handleUploadedScreenshots]);
 
   const handleGenerateImages = useCallback(async () => {
     setIsGeneratingImages(true);
@@ -580,8 +625,11 @@ export default function DashboardPage() {
         throw new Error('Please add at least one feature to generate images');
       }
 
-      // Prepare screenshots for the API (only include base64-loaded ones)
-      const screenshotsForApi = extractedScreenshots
+      // Prepare screenshots for the API: only those whose origin matches the
+      // current screenshot-source preference (a 'website' preference must never
+      // silently feed GitHub/local screenshots to AI generation) and that
+      // actually carry decoded bytes.
+      const screenshotsForApi = getEligibleScreenshots(extractedScreenshots, screenshotSource)
         .filter((s) => s.base64 && s.mimeType)
         .map((s) => ({
           base64: s.base64!,
@@ -668,6 +716,7 @@ export default function DashboardPage() {
     formData.appDescription,
     formData.features,
     extractedScreenshots,
+    screenshotSource,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -1017,6 +1066,15 @@ export default function DashboardPage() {
   }, [formData, images, saveToPreview]);
 
   const progress = calculateProgress();
+
+  // Screenshots eligible for direct use under the current screenshot-source
+  // preference. Real screenshots are the Shopify 4.4.4-compliant primary path,
+  // so when any are eligible the "Use screenshots directly" action is surfaced
+  // as the recommended CTA (over pure-AI generation).
+  const eligibleScreenshots = useMemo(
+    () => getEligibleScreenshots(extractedScreenshots, screenshotSource).filter((s) => s.base64),
+    [extractedScreenshots, screenshotSource]
+  );
 
   // Secure URL validation - prevents XSS and ensures proper protocol
   const isUrlValid = useMemo(() => {
@@ -1377,13 +1435,22 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* Direct-use of screenshots harvested from an analyzed source. */}
-                {extractedScreenshots.some((s) => s.base64) && (
-                  <div className="mb-4">
+                {/* Direct-use of screenshots harvested from an analyzed source —
+                    only those eligible for the current screenshot-source
+                    preference. This is the recommended (Shopify 4.4.4-compliant)
+                    primary path, so it is styled prominently above pure-AI
+                    generation. */}
+                {eligibleScreenshots.length > 0 && (
+                  <div className="mb-4 rounded-lg border border-primary/40 bg-primary/5 p-4">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+                        Recommended
+                      </span>
+                      <span className="text-sm font-medium">Use your real screenshots</span>
+                    </div>
                     <Button
                       onClick={handleUseScreenshotsDirectly}
                       disabled={isUsingScreenshots}
-                      variant="outline"
                       className="w-full"
                     >
                       {isUsingScreenshots ? (
@@ -1394,14 +1461,14 @@ export default function DashboardPage() {
                       ) : (
                         <>
                           <Images className="h-4 w-4 mr-2" />
-                          Use {extractedScreenshots.filter((s) => s.base64).length} screenshot(s)
-                          directly
+                          Use {eligibleScreenshots.length} screenshot(s) directly
                         </>
                       )}
                     </Button>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Uses real screenshots as feature images — recommended for Shopify listing rule
-                      4.4.4.
+                      Real screenshots are cropped to Shopify specs and used as feature images — the
+                      recommended path for Shopify listing rule 4.4.4. AI generation below is a
+                      fallback.
                     </p>
                   </div>
                 )}

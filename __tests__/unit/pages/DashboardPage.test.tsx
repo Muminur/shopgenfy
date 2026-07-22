@@ -174,13 +174,16 @@ describe('Dashboard Page', () => {
     it('should display error message when analyze API fails', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
+      render(<DashboardPage />);
+
+      // Queue AFTER render so the mount-time GET /api/settings consumes the
+      // default mock and the analyze call gets this error response.
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
         json: async () => ({ error: 'Internal server error' }),
       });
 
-      render(<DashboardPage />);
       const urlInput = screen.getByLabelText(/landing page url/i);
       await user.type(urlInput, 'https://example.com');
 
@@ -193,13 +196,16 @@ describe('Dashboard Page', () => {
     it('should display error message when save API fails', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
+      render(<DashboardPage />);
+
+      // Queue AFTER render so the mount-time GET /api/settings consumes the
+      // default mock and the save call gets this error response.
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => ({ error: 'Validation failed' }),
       });
 
-      render(<DashboardPage />);
       const saveButton = screen.getByRole('button', { name: /save/i });
       await user.click(saveButton);
 
@@ -209,13 +215,16 @@ describe('Dashboard Page', () => {
     it('should allow dismissing error messages', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
+      render(<DashboardPage />);
+
+      // Queue AFTER render so the mount-time GET /api/settings consumes the
+      // default mock and the save call gets this error response.
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
         json: async () => ({ error: 'Server error' }),
       });
 
-      render(<DashboardPage />);
       const saveButton = screen.getByRole('button', { name: /save/i });
       await user.click(saveButton);
 
@@ -233,6 +242,10 @@ describe('Dashboard Page', () => {
     it('should display success message when analyze completes', { timeout: 15000 }, async () => {
       const user = userEvent.setup();
 
+      render(<DashboardPage />);
+
+      // Queue AFTER render so the mount-time GET /api/settings consumes the
+      // default mock and the analyze call gets this success response.
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -243,7 +256,6 @@ describe('Dashboard Page', () => {
         }),
       });
 
-      render(<DashboardPage />);
       const urlInput = screen.getByLabelText(/landing page url/i);
       await user.type(urlInput, 'https://example.com');
 
@@ -261,9 +273,12 @@ describe('Dashboard Page', () => {
       const delayedResponse = new Promise((resolve) => {
         resolvePromise = resolve;
       });
+      render(<DashboardPage />);
+
+      // Queue AFTER render so the mount-time GET /api/settings consumes the
+      // default mock and the analyze call gets this (delayed) response.
       mockFetch.mockReturnValueOnce(delayedResponse);
 
-      render(<DashboardPage />);
       const urlInput = screen.getByLabelText(/landing page url/i);
       await user.type(urlInput, 'https://example.com');
 
