@@ -148,6 +148,17 @@ export function extractFromZip(zip: Buffer): ExtractedSource {
   for (const entry of entries) {
     if (entry.isDirectory) continue;
     const size = entry.header.size;
+    // A declared uncompressed size of 0 paired with a real compressed payload is
+    // a decompression-bomb bypass: adm-zip's inflater only enforces its
+    // maxOutputLength cap when the expected length is > 0, so a lying 0 lets
+    // getData() inflate without bound (a legitimate empty file has BOTH size and
+    // compressedSize at 0). Reject before any entry is decompressed.
+    if (size === 0 && entry.header.compressedSize > 0) {
+      throw new SourceExtractError(
+        'Archive entry declares zero uncompressed size but carries compressed data',
+        'ZIP_BOMB'
+      );
+    }
     if (size > MAX_ENTRY_UNCOMPRESSED_BYTES) {
       throw new SourceExtractError('Archive contains an oversized entry', 'ZIP_BOMB');
     }

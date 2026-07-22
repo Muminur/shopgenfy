@@ -3,6 +3,7 @@
 // parser returns no entries under jsdom, and the extractor runs in the node
 // runtime in production anyway.
 import { describe, it, expect } from 'vitest';
+import zlib from 'node:zlib';
 import AdmZip from 'adm-zip';
 import { extractFromZip, extractFromText, SourceExtractError } from '@/lib/source-extractor';
 
@@ -14,6 +15,74 @@ function zipWith(files: Record<string, Buffer | string>): Buffer {
     zip.addFile(name, Buffer.isBuffer(content) ? content : Buffer.from(content));
   }
   return zip.toBuffer();
+}
+
+/**
+ * Hand-build a single-entry zip whose CENTRAL-DIRECTORY uncompressed-size field
+ * lies as 0 while the entry actually carries a real DEFLATE payload. adm-zip's
+ * declared-size guards read this field, so a zero lie sails past every size cap;
+ * and its inflater only applies `maxOutputLength` when the expected length is
+ * > 0, so `getData()` would inflate the payload unbounded (the decompression
+ * bomb — 305 KB of compressed zeros expands to ~300 MB in the real exploit).
+ * adm-zip cannot produce such an archive itself, so the bytes are assembled by
+ * hand against the ZIP spec (offsets verified against adm-zip's own constants).
+ */
+function zipWithLyingZeroSize(name: string, uncompressed: Buffer): Buffer {
+  const compressed = zlib.deflateRawSync(uncompressed);
+  const nameBuf = Buffer.from(name);
+  const crc = 0; // arbitrary — not validated while parsing the central directory
+
+  // Local file header (30 bytes + name). Its uncompressed-size field stays
+  // truthful; only the central directory carries the lie.
+  const local = Buffer.alloc(30 + nameBuf.length);
+  local.writeUInt32LE(0x04034b50, 0); // LOCSIG
+  local.writeUInt16LE(20, 4); // version needed
+  local.writeUInt16LE(0, 6); // flags
+  local.writeUInt16LE(8, 8); // method: DEFLATED
+  local.writeUInt16LE(0, 10); // mod time
+  local.writeUInt16LE(0, 12); // mod date
+  local.writeUInt32LE(crc, 14); // crc-32
+  local.writeUInt32LE(compressed.length, 18); // compressed size
+  local.writeUInt32LE(uncompressed.length, 22); // uncompressed size
+  local.writeUInt16LE(nameBuf.length, 26); // filename length
+  local.writeUInt16LE(0, 28); // extra length
+  nameBuf.copy(local, 30);
+
+  const localAndData = Buffer.concat([local, compressed]);
+
+  // Central directory header (46 bytes + name) — uncompressed size LIED to 0.
+  const central = Buffer.alloc(46 + nameBuf.length);
+  central.writeUInt32LE(0x02014b50, 0); // CENSIG
+  central.writeUInt16LE(20, 4); // version made by
+  central.writeUInt16LE(20, 6); // version needed
+  central.writeUInt16LE(0, 8); // flags
+  central.writeUInt16LE(8, 10); // method: DEFLATED
+  central.writeUInt16LE(0, 12); // mod time
+  central.writeUInt16LE(0, 14); // mod date
+  central.writeUInt32LE(crc, 16); // crc-32
+  central.writeUInt32LE(compressed.length, 20); // CENSIZ compressed size (truthful)
+  central.writeUInt32LE(0, 24); // CENLEN uncompressed size — THE LIE
+  central.writeUInt16LE(nameBuf.length, 28); // filename length
+  central.writeUInt16LE(0, 30); // extra length
+  central.writeUInt16LE(0, 32); // comment length
+  central.writeUInt16LE(0, 34); // disk number start
+  central.writeUInt16LE(0, 36); // internal attrs
+  central.writeUInt32LE(0, 38); // external attrs
+  central.writeUInt32LE(0, 42); // local header offset
+  nameBuf.copy(central, 46);
+
+  // End of central directory record (22 bytes).
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); // ENDSIG
+  eocd.writeUInt16LE(0, 4); // disk number
+  eocd.writeUInt16LE(0, 6); // disk with central directory
+  eocd.writeUInt16LE(1, 8); // entries on this disk
+  eocd.writeUInt16LE(1, 10); // total entries
+  eocd.writeUInt32LE(central.length, 12); // central directory size
+  eocd.writeUInt32LE(localAndData.length, 16); // central directory offset
+  eocd.writeUInt16LE(0, 20); // comment length
+
+  return Buffer.concat([localAndData, central, eocd]);
 }
 
 function makePng(tag: string): Buffer {
@@ -163,6 +232,28 @@ describe('extractFromZip', () => {
     }
     const code = extractCode(() => extractFromZip(zip.toBuffer()));
     expect(code).toBe('ZIP_BOMB');
+  });
+
+  it('rejects an entry that declares zero uncompressed size but carries a real DEFLATE payload', () => {
+    // A real DEFLATE payload with the central-directory size lied to 0. Every
+    // declared-size guard sees 0 and lets it through, and adm-zip's inflater
+    // then runs uncapped (see helper doc — the real exploit inflates ~300 MB).
+    // The zero-lie guard must reject it BEFORE any getData()/inflate happens.
+    // A small payload is enough to prove the guard; its correctness does not
+    // depend on the inflated size.
+    const buf = zipWithLyingZeroSize('README.md', Buffer.from('bomb-payload '.repeat(256)));
+    const code = extractCode(() => extractFromZip(buf));
+    expect(code).toBe('ZIP_BOMB');
+  });
+
+  it('still accepts a legitimately empty file (zero size AND zero compressed size)', () => {
+    const buf = zipWith({
+      'README.md': 'A readme with sufficient descriptive content for the analysis pipeline to run.',
+      'empty.txt': Buffer.alloc(0),
+    });
+    // Must not be mistaken for the zero-size lie: a real empty file is stored,
+    // so compressedSize is 0 too and extraction proceeds normally.
+    expect(() => extractFromZip(buf)).not.toThrow();
   });
 
   it('maps a non-zip buffer to an INVALID_ZIP error', () => {
