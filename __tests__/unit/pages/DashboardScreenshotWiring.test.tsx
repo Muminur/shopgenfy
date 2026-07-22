@@ -53,6 +53,7 @@ function routeMock(handlers: {
   settings?: () => unknown;
   settingsOk?: boolean;
   analyze?: () => unknown;
+  source?: () => unknown;
   imagen?: () => unknown;
 }) {
   mockFetch.mockImplementation((url: string) => {
@@ -68,6 +69,12 @@ function routeMock(handlers: {
       return Promise.resolve({
         ok: true,
         json: async () => (handlers.analyze ? handlers.analyze() : {}),
+      });
+    }
+    if (u.includes('/api/analyze/source')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => (handlers.source ? handlers.source() : {}),
       });
     }
     if (u.includes('/api/imagen/generate')) {
@@ -190,6 +197,26 @@ describe('Dashboard screenshot-source wiring — eligibility by setting', () => 
     await user.type(screen.getByLabelText(/landing page url/i), 'https://example.com');
     await user.click(screen.getByRole('button', { name: /analyze with ai/i }));
 
+    expect(await directUseButtonAppears()).toBeInTheDocument();
+  });
+
+  it('folder setting + Local Source analysis: source-origin screenshots ARE eligible (direct-use button shown)', async () => {
+    const user = userEvent.setup();
+    // Set folder locally so the synchronous read applies immediately (no need
+    // to wait for the settings API to resolve before analyzing).
+    localStorage.setItem('shopgenfy_screenshot_source', 'folder');
+    routeMock({ settings: () => ({ screenshotSource: 'folder' }), source: analysisWithScreenshot });
+
+    render(<DashboardPage />);
+    await user.click(screen.getByRole('tab', { name: /local source/i }));
+    await user.type(
+      screen.getByLabelText(/paste/i),
+      'My app README with enough descriptive content to analyze thoroughly.'
+    );
+    await user.click(screen.getByRole('button', { name: /analyze source/i }));
+
+    // A zip/paste-harvested screenshot is tagged 'source' and is eligible under
+    // the 'folder' preference (your own files), so the direct-use CTA appears.
     expect(await directUseButtonAppears()).toBeInTheDocument();
   });
 });
