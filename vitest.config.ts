@@ -8,6 +8,14 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./__tests__/setup.ts'],
+    // Default (5000ms) is too tight for the heavier page-level suites (e.g.
+    // DashboardPage and friends, which mount a large component tree and run
+    // several userEvent interactions per test). Under full-suite parallelism
+    // — many jsdom environments/renders sharing a small number of CPU cores —
+    // these tests can legitimately take longer than 5s even though nothing is
+    // actually hung, causing spurious "Test timed out" failures that vanish on
+    // a re-run. Raise the ceiling suite-wide rather than special-casing files.
+    testTimeout: 20000,
     include: ['__tests__/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', '.next', '__tests__/e2e/**'],
     coverage: {
