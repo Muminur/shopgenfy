@@ -1176,7 +1176,10 @@ export default function DashboardPage() {
 
                 {/* Website URL panel */}
                 {inputTab === 'url' && (
-                  <div role="tabpanel" className="space-y-4">
+                  <div
+                    role="tabpanel"
+                    className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
+                  >
                     <URLInput
                       label="Landing Page URL"
                       value={formData.landingPageUrl}
@@ -1206,7 +1209,10 @@ export default function DashboardPage() {
 
                 {/* GitHub Repo panel */}
                 {inputTab === 'github' && (
-                  <div role="tabpanel" className="space-y-4">
+                  <div
+                    role="tabpanel"
+                    className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
+                  >
                     <URLInput
                       label="GitHub Repository URL"
                       value={githubUrl}
@@ -1237,7 +1243,10 @@ export default function DashboardPage() {
 
                 {/* Local Source panel */}
                 {inputTab === 'source' && (
-                  <div role="tabpanel" className="space-y-4">
+                  <div
+                    role="tabpanel"
+                    className="space-y-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 motion-safe:ease-out"
+                  >
                     <div className="space-y-2">
                       <Label htmlFor="source-zip">Upload source (.zip)</Label>
                       <Input

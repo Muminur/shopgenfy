@@ -34,26 +34,26 @@ function StatusIndicator({ name, status, ariaLabel }: StatusIndicatorProps) {
     >
       <div className="flex items-center gap-3">
         {isConnected ? (
-          <Wifi className="h-5 w-5 text-green-600" aria-hidden="true" />
+          <Wifi className="h-5 w-5 text-success" aria-hidden="true" />
         ) : (
-          <WifiOff className="h-5 w-5 text-red-600" aria-hidden="true" />
+          <WifiOff className="h-5 w-5 text-destructive" aria-hidden="true" />
         )}
         <span className="font-medium">{name}</span>
       </div>
       <div className="flex items-center gap-2">
         <span
-          className={cn('h-2.5 w-2.5 rounded-full', isConnected ? 'bg-green-500' : 'bg-red-500')}
+          className={cn(
+            'h-2.5 w-2.5 rounded-full transition-colors duration-200',
+            isConnected ? 'bg-success' : 'bg-destructive'
+          )}
           aria-hidden="true"
         />
+        {/* success/destructive tokens are contrast-verified (see globals.css)
+            against both the light card and the dark card background. */}
         <span
           className={cn(
-            'text-sm font-medium',
-            // On white (light mode) the -600 shades miss WCAG AA for 14px text:
-            // green-600 (#00a63e) is only 3.21:1. green-700 (#008236) = 4.94:1
-            // and red-700 (#c10007) = 6.4:1 both clear the 4.5:1 floor. Dark
-            // mode keeps the -600 shades, which have ample contrast on the dark
-            // card background.
-            isConnected ? 'text-green-700 dark:text-green-600' : 'text-red-700 dark:text-red-600'
+            'text-sm font-medium transition-colors duration-200',
+            isConnected ? 'text-success' : 'text-destructive'
           )}
         >
           {isConnected ? 'Connected' : 'Disconnected'}
